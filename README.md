@@ -13,3 +13,6 @@ install FreeBSD 15 using USB Wifi network card, download and execute the script 
 .
 thats all folks
 
+update : now the if_atlantic.ko patched and an little script to install it available.
+
+Enjoy!
