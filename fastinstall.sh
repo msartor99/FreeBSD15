@@ -13,6 +13,9 @@ fi
 
 # 1. Copie du binaire
 echo "Installation du driver..."
+git clone https://github.com/msartor99/FreeBSD-15 /tmp/fb15_assets
+cd /tmp/fb15_assets
+
 cp "$DRIVER_NAME" "$MODULE_DIR/"
 chmod 555 "$MODULE_DIR/$DRIVER_NAME"
 
