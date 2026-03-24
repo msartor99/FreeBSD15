@@ -6,6 +6,8 @@
 DRIVER_NAME="if_atlantic.ko"
 MODULE_DIR="/boot/modules"
 
+pkg install -y git
+
 if [ "$(id -u)" -ne 0 ]; then 
     echo "Erreur : root requis."
     exit 1
