@@ -10,7 +10,7 @@ I search on a lot of website, forum and see video on Youtube to find my best con
 
 
 
-this is my last script to made post installation.
+this is my last version of instruction guide to made post installation.
 
 
 
