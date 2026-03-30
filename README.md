@@ -21,7 +21,7 @@ Enjoy!
 
 ________________________________________________________________________________________
 
-new version, Setup_P620_275_AMD.txt use bsddialog for parameters
+new version, Setup_post_install_generic.sh use bsddialog for parameters
 
 
 Enjoy!
