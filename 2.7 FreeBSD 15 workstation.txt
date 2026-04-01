@@ -1,6 +1,6 @@
 # installation  freebsd 15 + wayland + plasma6 part 1
 # version 2.7 25.3.2026
-# boot usb et install : keyboard sf, network ip fixe, user administrateur,password
+# boot usb et install : keyboard sf, network ip static, user administrateur,password
 
 ####################################################
 #       STATUS :wayfire / Wayland - Ok
@@ -115,7 +115,7 @@ service linux start
 
 ####################################################
 # configuration base and 
-# install htop and utilities maybe not avahi
+# install htop and utilities 
 ####################################################
 
 pkg install -y doas unzip libzip wget git 
@@ -178,7 +178,8 @@ echo "add path 'unlpt*' mode 0660 group cups" >> /etc/devfs.rules
 echo "add path 'unlpt*' mode 0660 group cups" >> /etc/devfs.rules
 echo "add path 'lpt*' mode 0660 group cups" >> /etc/devfs.rules
 
-pkg install -y cups gutenprint cups-filters hplip system-config-printer
+pkg install -y cups gutenprint cups-filters hplip system-config-printer avahi
+sysrc avahi_enable=YES
 sysrc cupsd_enable="YES"
 sysrc devfs_system_ruleset="system"
 service devfs restart
@@ -228,9 +229,9 @@ service devfs restart
 #
 ####################################################
 
-pkg install -y xorg dbus avahi signal-cli
+pkg install -y xorg dbus signal-cli
 sysrc dbus_enable=YES
-sysrc avahi_enable=YES
+
 echo  "proc       proc       procfs       rw       0       0" >>/etc/fstab
 echo  "fdesc     /dev/fd      fdescfs       rw       0       0" >>/etc/fstab
 
@@ -283,14 +284,23 @@ nvidia-xconfig
 
 
 ####################################################
+# install Radeon RX 5500 
+#
+####################################################
+
+pkg install -y wayland xwayland seatd
+pkg install -y drm-kmod
+sysrc kld_list+=amdgpu
+sysrc seatd_enable="YES"
+
+
+####################################################
 # now install sddm
 #
 ####################################################
 
 
-pkg install -y sddm seatd
-
-sysrc seatd_enable="YES"
+pkg install -y sddm 
 
 sysrc sddm_enable="YES"
 sysrc sddm_lang="ch_FR"
@@ -299,8 +309,8 @@ sysrc sddm_lang="ch_FR"
 
 
 ###################################################
-# optional sddm customization, before use Winscp to copy config files
-# on /media directory
+# optional sddm customization
+# on /tmp directory
 #
 ####################################################
 
@@ -328,7 +338,7 @@ EOF
 cd 
 
 ####################################################
-# boot menu 
+# boot menu images
 #
 ####################################################
 
@@ -370,7 +380,6 @@ cd
 
 ####################################################
 # installation Wayland and Plasma6
-# 
 # from youtube 
 # https://www.youtube.com/watch?v=vbWOLzGDa4I
 ####################################################
@@ -393,7 +402,7 @@ pkg install -y kate konsole ark remmina dolphin Kvantum
 
 
 #####################################################
-# install wayfire ( desktop manager)  needed for plasma6
+# install wayfire ( desktop manager)
 #####################################################
 
 pkg install -y wayfire wf-shell alacritty swaylock-effects swayidle wlogout kanshi mako wlsunset
@@ -485,7 +494,6 @@ pkg install -y firefox
 pkg install -y vlc ffmpeg libva-vdpau-driver libva-utils libdvdread libdvdnav signal-cli \
 eom remmina xdg-user-dirs octopkg firefox-esr chromium thunderbird multimedia/mpv \
 gstreamer1-plugins-all gstreamer1-libav libbluray libdvdread libdvdnav \
-
 webcamd v4l-utils kdenlive \
 cantarell-fonts droid-fonts-ttf inconsolata-ttf noto-basic noto-emoji roboto-fonts-ttf ubuntu-font \
 papirus-icon-theme qogir-icon-themes win98se-icon-theme ImageMagick7
@@ -502,13 +510,22 @@ sysrc -v webcamd_enable=YES
 pkg install -y cantarell-fonts droid-fonts-ttf inconsolata-ttf noto-basic noto-emoji roboto-fonts-ttf  ubuntu-font webfonts terminus-font terminus-ttf
 
 # Install some fonts
-pkg install -y chinese/arphicttf chinese/font-std hebrew/culmus hebrew/elmar-fonts japanese/font-ipa japanese/font-ipa-uigothic japanese/font-ipaex japanese/font-kochi japanese/font-migmix japanese/font-migu japanese/font-mona-ipa japanese/font-motoya-al japanese/font-mplus-ipa japanese/font-sazanami japanese/font-shinonome japanese/font-takao japanese/font-ume japanese/font-vlgothic x11-fonts/hanazono-fonts-ttf japanese/font-mikachan korean/aleefonts-ttf korean/nanumfonts korean/unfonts-core x11-fonts/anonymous-pro x11-fonts/artwiz-aleczapka x11-fonts/dejavu x11-fonts/inconsolata-ttf x11-fonts/terminus-font x11-fonts/cantarell-fonts x11-fonts/droid-fonts-ttf x11-fonts/doulos x11-fonts/ubuntu-font x11-fonts/isabella x11-fonts/junicode x11-fonts/khmeros x11-fonts/padauk x11-fonts/stix-fonts x11-fonts/charis x11-fonts/urwfonts-ttf russian/koi8r-ps x11-fonts/geminifonts x11-fonts/cyr-rfx x11-fonts/paratype x11-fonts/gentium-plus x11-fonts/nerd-fonts x11-fonts/powerline-fonts
+pkg install -y chinese/arphicttf chinese/font-std hebrew/culmus hebrew/elmar-fonts japanese/font-ipa \
+japanese/font-ipa-uigothic japanese/font-ipaex japanese/font-kochi japanese/font-migmix japanese/font-migu \
+japanese/font-mona-ipa japanese/font-motoya-al japanese/font-mplus-ipa japanese/font-sazanami japanese/font-shinonome \
+japanese/font-takao japanese/font-ume japanese/font-vlgothic x11-fonts/hanazono-fonts-ttf japanese/font-mikachan \
+korean/aleefonts-ttf korean/nanumfonts korean/unfonts-core x11-fonts/anonymous-pro x11-fonts/artwiz-aleczapka \
+x11-fonts/dejavu x11-fonts/inconsolata-ttf x11-fonts/terminus-font x11-fonts/cantarell-fonts x11-fonts/droid-fonts-ttf \
+x11-fonts/doulos x11-fonts/ubuntu-font x11-fonts/isabella x11-fonts/junicode x11-fonts/khmeros x11-fonts/padauk \
+x11-fonts/stix-fonts x11-fonts/charis x11-fonts/urwfonts-ttf russian/koi8r-ps x11-fonts/geminifonts \
+x11-fonts/cyr-rfx x11-fonts/paratype x11-fonts/gentium-plus x11-fonts/nerd-fonts x11-fonts/powerline-fonts
 
 # Install Emoji fonts & tooling
 pkg install -y twemoji-color-font-ttf noto-emoji textproc/ibus-uniemoji
 
 # Install Icon & Cursor Themes
-pkg install -y x11-themes/papirus-icon-theme x11-themes/cursor-neutral-white-theme x11-themes/qogir-icon-themes x11-themes/win98se-icon-theme
+pkg install -y x11-themes/papirus-icon-theme x11-themes/cursor-neutral-white-theme \
+x11-themes/qogir-icon-themes x11-themes/win98se-icon-theme
 
 
 
@@ -582,20 +599,15 @@ sysrc xrdp_sesman_enable="YES"
 
 mv /usr/local/etc/xrdp/startwm.sh /usr/local/etc/xrdp/startwm.sh.backup
 echo 'export LANG=fr_FR.UTF-8' >> /usr/local/etc/xrdp/startwm.sh
-echo 'exec mate-session' >> /usr/local/etc/xrdp/startwm.sh
+# echo 'exec mate-session' >> /usr/local/etc/xrdp/startwm.sh
 # echo 'exec startxfce4 --with-ck-launch' >> /usr/local/etc/xrdp/startwm.sh
-# echo 'exec startplasma-x11' > /usr/local/etc/xrdp/startwm.sh
-
+echo 'exec startplasma-x11' > /usr/local/etc/xrdp/startwm.sh
 
 chmod 555  /usr/local/etc/xrdp/startwm.sh
 
 ####################################################
-# passage en latest
+# change to latest
 ####################################################
-
-
-# mkdir -p /usr/local/etc/pkg/repos
-# printf 'FreeBSD: { url: "pkg+http://pkg.FreeBSD.org/${ABI}/latest" }\n' > /usr/local/etc/pkg/repos/FreeBSD.conf
 
 sed -i '' -e 's/quarterly/latest/g' -e 's/pkg+http/http/g' /etc/pkg/FreeBSD.conf
 
@@ -604,14 +616,16 @@ pkg upgrade -y
 
 
 ####################################################
-# USE  KDE macos theme SONOMATIC 2.0 by phob1an, and install accretion start image, and whiteSur Dark for icon and util and kvantum
-
-####################################################
+# USE  KDE macos theme SONOMATIC 2.0 by phob1an,
+# and install accretion start image,
+# and whiteSur Dark for icon and util and kvantum
 # use macos Apple MACOS Whitesur by vinceliulice
 # use Win11os dark 
 ####################################################
 
 
+
+# optional for Lenovo P620
 
 ####################################################
 # install 10Gb Marvel ethernet card
