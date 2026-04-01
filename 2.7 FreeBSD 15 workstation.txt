@@ -229,7 +229,7 @@ service devfs restart
 #
 ####################################################
 
-pkg install -y xorg dbus signal-cli
+pkg install -y xorg dbus 
 sysrc dbus_enable=YES
 
 echo  "proc       proc       procfs       rw       0       0" >>/etc/fstab
