@@ -14,7 +14,7 @@ Enjoy!
 
 ________________________________________________________________________________________
 
-new version, Setup_postinstall_genericV65.sh use bsddialog for parameters
+
 
 .
 
