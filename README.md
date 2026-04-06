@@ -8,7 +8,7 @@ this is my last version of instruction guide to made post installation.
 
 this is not a script, only list of instruction to run on FreeBSD 15.
 
-use putty to open ssh shell on root by network.
+Launch PuTTY to connect to an SSH session as root over the network.
 
 Enjoy!
 
