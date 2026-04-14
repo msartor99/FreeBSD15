@@ -12,9 +12,10 @@ Launch PuTTY to connect to an SSH session as root over the network.
 
 Enjoy!
 
+# New version
 ________________________________________________________________________________________
 
-here is a new version : 2.8
+here is a new version : FreeBSD_15_universal_post_install.sh
 
 .
 
