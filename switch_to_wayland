@@ -1,0 +1,184 @@
+#!/bin/sh
+# Ultimate Post-Installation Script for FreeBSD 15
+# Target: KDE Plasma 6 (Wayland) + SDDM (X11) + Universal NVIDIA Support
+# Mode: Idempotent & Interactive
+
+echo "======================================================="
+echo "   Ultimate FreeBSD 15 + KDE + NVIDIA Setup Script     "
+echo "======================================================="
+
+# 1. Root check
+if [ "$(id -u)" -ne 0 ]; then
+    echo "[Error] This script must be run as root."
+    exit 1
+fi
+
+# 2. Interactive Prompts (GPU, User, Keyboard)
+echo ""
+echo "--- System Configuration ---"
+
+# GPU Selection
+echo "Select your NVIDIA GPU generation:"
+echo "  1) Modern (RTX 2000/3000/4000 series, GTX 16xx)"
+echo "  2) Legacy 580 (GTX 10xx series, Pascal Quadro like P4000)"
+printf "Enter choice [1 or 2]: "
+read -r gpu_choice
+
+# User Selection
+printf "Enter your main username (e.g., john): "
+read -r USERNAME
+
+# Keyboard Selection (Defaults to Swiss French)
+printf "Enter keyboard layout (e.g., ch, fr, us) [default: ch]: "
+read -r kb_layout
+kb_layout=${kb_layout:-ch}
+
+printf "Enter keyboard variant (e.g., fr, nodeadkeys, or leave empty) [default: fr]: "
+read -r kb_variant
+kb_variant=${kb_variant:-fr}
+echo "----------------------------"
+echo ""
+
+# 3. Clean up conflicting configurations and old drivers
+echo "[Info] Cleaning up old drivers and conflicting configurations..."
+pkg delete -y nvidia-driver nvidia-drm-kmod nvidia-driver-580 nvidia-drm-kmod-580 > /dev/null 2>&1
+rm -f /home/*/.config/plasma-workspace/env/nvidia-wayland.sh 2>/dev/null
+rm -f /root/.config/plasma-workspace/env/nvidia-wayland.sh 2>/dev/null
+rm -f /usr/local/etc/sddm.conf.d/20-wayland.conf 2>/dev/null
+echo "[OK] Cleanup complete."
+
+# 4. Mount /proc (Required for KDE)
+if ! grep -qw "procfs" /etc/fstab; then
+    echo "proc /proc procfs rw 0 0" >> /etc/fstab
+    mount -a 2>/dev/null
+    echo "[OK] /proc added to /etc/fstab and mounted."
+else
+    echo "[Skip] /proc is already configured."
+fi
+
+# 5. Install Base Packages & GPU Drivers
+echo "[Info] Installing required packages. This might take a while..."
+pkg install -y seatd wayland plasma6-plasma sddm qt6-wayland xorg-server xauth xinit
+
+if [ "$gpu_choice" = "1" ]; then
+    echo "[Info] Installing Modern NVIDIA drivers..."
+    pkg install -y nvidia-driver nvidia-drm-kmod
+elif [ "$gpu_choice" = "2" ]; then
+    echo "[Info] Installing Legacy 580 NVIDIA drivers..."
+    pkg install -y nvidia-driver-580 nvidia-drm-kmod-580
+else
+    echo "[Error] Invalid GPU choice. Exiting."
+    exit 1
+fi
+
+# 6. Enable Core Services
+sysrc dbus_enable="YES" > /dev/null
+sysrc seatd_enable="YES" > /dev/null
+sysrc sddm_enable="YES" > /dev/null
+echo "[OK] Services (dbus, seatd, sddm) enabled in rc.conf."
+
+# 7. Load Kernel Modules
+current_kld=$(sysrc -n kld_list 2>/dev/null || echo "")
+for mod in nvidia-drm nvidia-modeset nvidia; do
+    if ! echo "$current_kld" | grep -qw "$mod"; then
+        sysrc kld_list+="$mod " > /dev/null
+        echo "[OK] Kernel module '$mod' added to kld_list."
+    else
+        echo "[Skip] Kernel module '$mod' already in kld_list."
+    fi
+done
+
+# 8. Enable NVIDIA KMS (Kernel Mode Setting for Wayland)
+if ! grep -q "^hw.nvidiadrm.modeset=1" /boot/loader.conf 2>/dev/null; then
+    echo "hw.nvidiadrm.modeset=1" >> /boot/loader.conf
+    echo "[OK] NVIDIA KMS enabled in /boot/loader.conf."
+else
+    echo "[Skip] NVIDIA KMS already enabled."
+fi
+
+# 9. Environment Variables for Wayland/NVIDIA fixes
+PROFILE_FILE="/etc/profile"
+for var in "export NVIDIA_DRM_MODESET=1" "export WLR_NO_HARDWARE_CURSORS=1"; do
+    if ! grep -Fxq "$var" "$PROFILE_FILE" 2>/dev/null; then
+        echo "$var" >> "$PROFILE_FILE"
+        echo "[OK] Environment variable '$var' added to $PROFILE_FILE."
+    else
+        echo "[Skip] Variable '$var' already present."
+    fi
+done
+
+# 10. DevFS Rules (Fixes "Operation not permitted" for Wayland TTY control)
+DEVFS_FILE="/etc/devfs.rules"
+if ! grep -q "^\[localrules=10\]" "$DEVFS_FILE" 2>/dev/null; then
+    cat <<EOF >> "$DEVFS_FILE"
+
+[localrules=10]
+add path 'drm/*' mode 0660 group video
+add path 'ttyv*' mode 0660 group video
+EOF
+    echo "[OK] DevFS rules for TTY and DRM added."
+else
+    echo "[Skip] DevFS rules already present."
+fi
+sysrc devfs_system_ruleset="localrules" > /dev/null
+service devfs restart > /dev/null
+
+# 11. Permissions Management
+echo "[Info] Setting up user groups..."
+
+# For the SDDM system user
+for grp in video tty; do
+    if ! pw groupshow "$grp" | grep -qw "sddm"; then
+        pw groupmod "$grp" -m sddm
+        echo "[OK] System user 'sddm' added to '$grp' group."
+    fi
+done
+
+# For the Main User
+if id "$USERNAME" >/dev/null 2>&1; then
+    for grp in video tty wheel; do
+        if ! pw groupshow "$grp" | grep -qw "$USERNAME"; then
+            pw groupmod "$grp" -m "$USERNAME"
+            echo "[OK] User '$USERNAME' added to '$grp' group."
+        fi
+    done
+else
+    echo "[Warning] User '$USERNAME' not found. You will need to add groups manually."
+fi
+
+# 12. Xorg Configuration (Nvidia Driver & Keyboard)
+echo "[Info] Generating Xorg configuration for SDDM..."
+mkdir -p /usr/local/etc/X11/xorg.conf.d/
+
+cat <<EOF > /usr/local/etc/X11/xorg.conf.d/20-nvidia.conf
+Section "Device"
+    Identifier "Nvidia Card"
+    Driver "nvidia"
+EndSection
+EOF
+
+cat <<EOF > /usr/local/etc/X11/xorg.conf.d/00-keyboard.conf
+Section "InputClass"
+    Identifier "Keyboard system"
+    MatchIsKeyboard "on"
+    Option "XkbLayout" "$kb_layout"
+    Option "XkbVariant" "$kb_variant"
+EndSection
+EOF
+echo "[OK] Xorg files (Nvidia + Keyboard $kb_layout/$kb_variant) generated."
+
+# 13. SDDM Configuration (Forcing X11 backend to avoid Wayland TTY deadlock)
+echo "[Info] Configuring SDDM backend..."
+mkdir -p /usr/local/etc/sddm.conf.d
+
+cat <<EOF > /usr/local/etc/sddm.conf.d/10-x11-backend.conf
+[General]
+DisplayServer=x11
+EOF
+echo "[OK] SDDM configured to use X11 backend."
+
+echo "======================================================="
+echo " Setup Complete! Please reboot your system.            "
+echo " At the SDDM login screen, remember to select          "
+echo " 'Plasma (Wayland)' before entering your password.     "
+echo "======================================================="
