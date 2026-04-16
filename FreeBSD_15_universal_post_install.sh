@@ -325,17 +325,37 @@ development_config() {
 }
 
 nasa_theme() { 
+    bsddialog --infobox "Downloading and configuring NASA Theme..." 5 60
+    
+    [ -d /tmp/fb14_assets ] && rm -rf /tmp/fb14_assets
     git clone https://github.com/msartor99/FreeBSD14 /tmp/fb14_assets
+    
     mkdir -p /usr/local/share/sddm/themes/nasa
-    cp -r /usr/local/share/sddm/themes/maldives/* /usr/local/share/sddm/themes/nasa/
+    cp -r /usr/local/share/sddm/themes/maldives/* /usr/local/share/sddm/themes/nasa/ 2>/dev/null
     cp -f /tmp/fb14_assets/Main.qml /usr/local/share/sddm/themes/nasa/
     cp -f /tmp/fb14_assets/metadata.desktop /usr/local/share/sddm/themes/nasa/
     cp -f /tmp/fb14_assets/nasa2560login.jpg /usr/local/share/sddm/themes/nasa/background.jpg
-    cat > /usr/local/etc/sddm.conf <<EOF
+    
+    if [ -f /usr/local/share/sddm/themes/nasa/theme.conf ]; then
+        sed -i '' 's/^background=.*/background=background.jpg/' /usr/local/share/sddm/themes/nasa/theme.conf
+    fi
+
+    mkdir -p /usr/local/etc/sddm.conf.d
+    cat > /usr/local/etc/sddm.conf.d/theme.conf <<EOF
 [Theme]
 Current=nasa
 EOF
-    mkdir -p /boot/images; cp -f /tmp/fb14_assets/freebsd-brand-rev.png /boot/images/; cp -f /tmp/fb14_assets/freebsd-logo-rev.png /boot/images/; cp -f /tmp/fb14_assets/nasa1920.png /boot/images/splash.png; sysrc -f /boot/loader.conf splash="/boot/images/splash.png"
+
+    mkdir -p /boot/images
+    cp -f /tmp/fb14_assets/freebsd-brand-rev.png /boot/images/
+    cp -f /tmp/fb14_assets/freebsd-logo-rev.png /boot/images/
+    cp -f /tmp/fb14_assets/nasa1920.png /boot/images/splash.png
+    
+    sysrc -f /boot/loader.conf splash="/boot/images/splash.png"
+    sysrc -f /boot/loader.conf splash_bmp_load="YES"
+    sysrc -f /boot/loader.conf splash_txt_load="YES"
+    sysrc -f /boot/loader.conf splash_pcx_load="YES"
+    
     mark_done "C"
 }
 
