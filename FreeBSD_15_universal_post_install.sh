@@ -337,8 +337,8 @@ multimedia_config() {
 }
 
 development_config() {
-    bsddialog --infobox "Installing Development Tools & Languages (GCC, Python, Rust)..." 5 70
-    pkg install -y gcc python3 rust gmake cmake pkgconf gdb
+    bsddialog --infobox "Installing Development Tools, Editors & Debuggers..." 5 70
+    pkg install -y gcc python3 rust gmake cmake pkgconf gdb cgdb neovim vscode
     mark_done "B"
 }
 
@@ -401,7 +401,7 @@ while true; do
         "8" "$(get_label "8" "VirtualBox 7.2 Host (Blocked in VM)")" \
         "9" "$(get_label "9" "Basic Apps & Fonts (Web, Mail, VLC)")" \
         "A" "$(get_label "A" "Multimedia Creation (GIMP, Blender, OBS...)")" \
-        "B" "$(get_label "B" "Development & Languages (GCC, Python, Rust)")" \
+        "B" "$(get_label "B" "Dev Tools & Editors (GCC, Python, VSCode, GDB)")" \
         "C" "$(get_label "C" "NASA Theme (SDDM & Boot)")" \
         "D" "$(get_label "D" "Upgrade to LATEST Branch")" \
         "Q" "Quit" 3>&1 1>&2 2>&3)
