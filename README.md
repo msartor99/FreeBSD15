@@ -8,8 +8,6 @@ Here is the latest version of my installation guide.
 
 FreeBSD_15_universal_post_install.sh
 
-This isn't a script, but simply a list of instructions to follow on FreeBSD 15.
-
 Launch PuTTY to connect to an SSH session as root over the network.
 
 Enjoy!
