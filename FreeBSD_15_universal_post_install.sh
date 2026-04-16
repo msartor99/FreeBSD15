@@ -62,7 +62,15 @@ initial_setup() {
     bsddialog --infobox "Starting System, CPU, Hardware and Language Setup..." 5 60
     
     # 1. Base System & PKG
-    pkg update -y && pkg install -y sudo doas unzip libzip wget git linux-rl9 htop neofetch python3 bashtop ImageMagick7 smartmontools
+    pkg update -y
+    
+    # Explicit Sudo verification
+    if ! command -v sudo >/dev/null 2>&1; then
+        bsddialog --infobox "Installing sudo..." 5 40
+        pkg install -y sudo
+    fi
+    
+    pkg install -y doas unzip libzip wget git linux-rl9 htop neofetch python3 bashtop ImageMagick7 smartmontools
     
     bsddialog --msgbox "Visudo will now open. Please add '%wheel ALL=(ALL:ALL) ALL'." 8 50
     visudo
