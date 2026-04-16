@@ -22,12 +22,14 @@ is_vbox_guest() {
 
 # --- TRACKING FUNCTIONS (Persistent) ---
 mark_done() {
-    touch "${DB_PREFIX}$1"
-    bsddialog --msgbox "OK: Option $1 completed successfully!" 6 45
+    local OPTION_UPPER=$(echo "$1" | tr '[:lower:]' '[:upper:]')
+    touch "${DB_PREFIX}${OPTION_UPPER}"
+    bsddialog --msgbox "OK: Option ${OPTION_UPPER} completed successfully!" 6 45
 }
 
 get_label() {
-    if [ -f "${DB_PREFIX}$1" ]; then
+    local OPTION_UPPER=$(echo "$1" | tr '[:lower:]' '[:upper:]')
+    if [ -f "${DB_PREFIX}${OPTION_UPPER}" ]; then
         echo "$2 [DONE]"
     else
         echo "$2"
@@ -328,7 +330,12 @@ nasa_theme() {
     bsddialog --infobox "Downloading and configuring NASA Theme..." 5 60
     
     [ -d /tmp/fb14_assets ] && rm -rf /tmp/fb14_assets
-    git clone https://github.com/msartor99/FreeBSD14 /tmp/fb14_assets
+    [ -f /tmp/fb14_assets.zip ] && rm -f /tmp/fb14_assets.zip
+    
+    fetch -o /tmp/fb14_assets.zip https://github.com/msartor99/FreeBSD14/archive/refs/heads/main.zip
+    unzip -q /tmp/fb14_assets.zip -d /tmp/
+    mv /tmp/FreeBSD14-main /tmp/fb14_assets
+    rm -f /tmp/fb14_assets.zip
     
     mkdir -p /usr/local/share/sddm/themes/nasa
     cp -r /usr/local/share/sddm/themes/maldives/* /usr/local/share/sddm/themes/nasa/ 2>/dev/null
