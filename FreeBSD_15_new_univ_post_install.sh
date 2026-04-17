@@ -98,8 +98,8 @@ initial_setup() {
 
     # 2. CPU Management & Power/Sensor Configuration
     CPU_TYPE=$(bsddialog --menu "Select CPU Type & Energy Management:" 13 70 2 \
-        "Intel" "Intel Ucode, Coretemp, IPMI & SMBus" \
-        "AMD" "AMD Ucode, Amdtemp, IPMI & SMBus (Lenovo P620)" 3>&1 1>&2 2>&3)
+        "Intel" "Intel CPU Firmware, Coretemp, IPMI & SMBus (I5 /I7 /I9 /Xeon )" \
+        "AMD" "AMD CPU Firmware, AMDtemp, IPMI & SMBus (AMD Ryzen )" 3>&1 1>&2 2>&3)
         
     case $CPU_TYPE in
         Intel) 
