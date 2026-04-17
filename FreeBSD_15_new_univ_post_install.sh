@@ -292,10 +292,11 @@ EOF
 
 # --- RESOLUTION SETTING FUNCTION (CONSOLE ONLY) ---
 set_monitor_resolution() {
-    RES_CHOICE=$(bsddialog --title "Display Resolution" --menu "Select base resolution for SDDM/X11:\n(Useful to avoid tiny text on 27-inch 4K monitors)" 16 75 5 \
+    RES_CHOICE=$(bsddialog --title "Display Resolution" --menu "Select base resolution for SDDM/X11:\n(Useful to avoid tiny text on 27-inch 4K monitors)" 17 75 6 \
         "Native" "Maximum Monitor Capability (Default)" \
         "3840x2160" "Force 3840x2160 (4K UHD)" \
         "2560x1440" "Force 2560x1440 (Better text size for 27\" 4K)" \
+        "1920x1200" "Force 1920x1200 (16:10 Professional)" \
         "1920x1080" "Force 1920x1080 (Standard Full HD)" \
         "Custom" "Type a custom resolution manually" 3>&1 1>&2 2>&3)
 
@@ -445,17 +446,76 @@ xfce_config() {
 
 samba_config() { 
     pkg install -y samba416
-    mkdir -p /home/share && chmod 777 /home/share
-    [ ! -f /usr/local/etc/smb4.conf ] && cat > /usr/local/etc/smb4.conf <<EOF
+    
+    # 1. Demander le chemin du répertoire
+    SMB_PATH=$(bsddialog --title "Samba Share Path" --inputbox "Entrez le chemin complet du répertoire à partager :" 9 60 "/home/data" 3>&1 1>&2 2>&3)
+    [ -z "$SMB_PATH" ] && SMB_PATH="/home/data"
+
+    # 2. Demander l'utilisateur propriétaire
+    SMB_USER=$(bsddialog --title "Samba Share Owner" --inputbox "Entrez l'utilisateur FreeBSD qui sera propriétaire de ce partage :" 9 60 "${USER_NAME:-nobody}" 3>&1 1>&2 2>&3)
+    [ -z "$SMB_USER" ] && SMB_USER="nobody"
+
+    # 3. Demander les droits d'écriture
+    if bsddialog --title "Samba Permissions" --yesno "Voulez-vous rendre ce partage INSCRIPTIBLE (Lecture/Écriture) ?\n(Choisissez Non pour Lecture Seule)" 8 60; then
+        SMB_WRITABLE="yes"
+    else
+        SMB_WRITABLE="no"
+    fi
+
+    # 4. Demander l'accès Invité et le mot de passe si besoin
+    if bsddialog --title "Samba Guest Access" --yesno "Autoriser l'accès INVITÉ (anonyme sans mot de passe) ?" 8 60; then
+        SMB_GUEST="yes"
+        VALID_USERS_LINE=""
+        SMB_PASS=""
+    else
+        SMB_GUEST="no"
+        VALID_USERS_LINE="valid users = $SMB_USER"
+        
+        # Saisie sécurisée du mot de passe pour cet utilisateur (avec masquage visible)
+        SMB_PASS=$(bsddialog --title "Samba Password" --insecure --passwordbox "Veuillez créer le mot de passe réseau Samba pour l'utilisateur '$SMB_USER' :" 9 60 3>&1 1>&2 2>&3)
+    fi
+
+    # Création du dossier et application des droits système
+    mkdir -p "$SMB_PATH"
+    chown "$SMB_USER" "$SMB_PATH"
+    
+    if [ "$SMB_GUEST" = "yes" ] && [ "$SMB_WRITABLE" = "yes" ]; then
+        chmod 777 "$SMB_PATH"
+    else
+        chmod 755 "$SMB_PATH"
+    fi
+
+    # Génération du nom de partage (ex: si /home/data, nom = data)
+    SHARE_NAME=$(basename "$SMB_PATH")
+    [ -z "$SHARE_NAME" ] && SHARE_NAME="Share"
+
+    # Sauvegarde de la configuration si elle existe
+    [ ! -f /usr/local/etc/smb4.conf.backup ] && [ -f /usr/local/etc/smb4.conf ] && cp /usr/local/etc/smb4.conf /usr/local/etc/smb4.conf.backup
+
+    # Écriture du fichier de configuration Samba
+    cat > /usr/local/etc/smb4.conf <<EOF
 [global]
     workgroup = HOMELAB
     map to guest = bad user
-[Share]
-    path = /home/share
-    writable = yes
-    guest ok = yes
+    server string = FreeBSD Samba Server
+    security = user
+
+[$SHARE_NAME]
+    path = $SMB_PATH
+    $VALID_USERS_LINE
+    writable = $SMB_WRITABLE
+    guest ok = $SMB_GUEST
+    force user = $SMB_USER
 EOF
-    sysrc samba_server_enable="YES"; service samba_server restart 2>/dev/null || service samba_server start
+
+    sysrc samba_server_enable="YES"
+    service samba_server restart 2>/dev/null || service samba_server start
+    
+    # Injection silencieuse du mot de passe dans Samba
+    if [ "$SMB_GUEST" = "no" ] && [ -n "$SMB_PASS" ]; then
+        (echo "$SMB_PASS"; echo "$SMB_PASS") | smbpasswd -s -a "$SMB_USER"
+    fi
+
     mark_done "7"
 }
 
@@ -494,7 +554,8 @@ EOF
     chmod 555 /usr/local/etc/xrdp/startwm.sh
     
     # 2. VNC Console Setup (x11vnc)
-    VNC_PASS=$(bsddialog --title "VNC Console Setup" --passwordbox "Create a password for VNC access to the physical screen (SDDM/Session):" 9 60 3>&1 1>&2 2>&3)
+    # Saisie avec option --insecure pour afficher des astérisques lors de la frappe
+    VNC_PASS=$(bsddialog --title "VNC Console Setup" --insecure --passwordbox "Create a password for VNC access to the physical screen (SDDM/Session):" 9 60 3>&1 1>&2 2>&3)
     if [ -n "$VNC_PASS" ]; then
         x11vnc -storepasswd "$VNC_PASS" /usr/local/etc/x11vnc.pwd
         chmod 600 /usr/local/etc/x11vnc.pwd
@@ -537,19 +598,19 @@ apps_config() {
     bsddialog --infobox "Installing general applications and fonts..." 5 60
     pkg install -y firefox chromium thunderbird vlc ffmpeg webcamd ImageMagick7 cantarell-fonts droid-fonts-ttf inconsolata-ttf noto-basic noto-emoji roboto-fonts-ttf ubuntu-font webfonts terminus-font terminus-ttf
     sysrc webcamd_enable=YES
-    mark_done "A"
+    mark_done "a"
 }
 
 multimedia_config() {
     bsddialog --infobox "Installing Multimedia Creation tools (GIMP, Blender, OBS, etc.)..." 5 70
     pkg install -y gimp inkscape krita blender kdenlive obs-studio audacity ardour ffmpeg gstreamer1-plugins-all
-    mark_done "B"
+    mark_done "b"
 }
 
 development_config() {
     bsddialog --infobox "Installing Development Tools, Editors & Debuggers..." 5 70
     pkg install -y gcc python3 rust gmake cmake pkgconf gdb cgdb neovim vscode
-    mark_done "C"
+    mark_done "c"
 }
 
 nasa_theme() { 
@@ -589,10 +650,10 @@ EOF
     sysrc -f /boot/loader.conf splash_txt_load="YES"
     sysrc -f /boot/loader.conf splash_pcx_load="YES"
     
-    mark_done "D"
+    mark_done "d"
 }
 
-switch_latest() { sed -i '' 's/quarterly/latest/g' /etc/pkg/FreeBSD.conf; pkg update -f && pkg upgrade -y; mark_done "E"; }
+switch_latest() { sed -i '' 's/quarterly/latest/g' /etc/pkg/FreeBSD.conf; pkg update -f && pkg upgrade -y; mark_done "e"; }
 
 # --- MAIN MENU ---
 
@@ -607,15 +668,15 @@ while true; do
         "4" "$(get_label "4" "Desktop: Plasma 6 + KDE Tools")" \
         "5" "$(get_label "5" "Desktop: MATE")" \
         "6" "$(get_label "6" "Desktop: XFCE4")" \
-        "7" "$(get_label "7" "Samba Server")" \
+        "7" "$(get_label "7" "Samba Server (Interactive)")" \
         "8" "$(get_label "8" "Remote Access: XRDP (New Session) & x11vnc (Console)")" \
         "9" "$(get_label "9" "VirtualBox 7.2 Host (Blocked in VM)")" \
-        "A" "$(get_label "A" "Basic Apps & Fonts (Web, Mail, VLC)")" \
-        "B" "$(get_label "B" "Multimedia Creation (GIMP, Blender, OBS...)")" \
-        "C" "$(get_label "C" "Dev Tools & Editors (GCC, Python, VSCode, GDB)")" \
-        "D" "$(get_label "D" "NASA Theme (SDDM & Boot)")" \
-        "E" "$(get_label "E" "Upgrade to LATEST Branch")" \
-        "Q" "Quit" 3>&1 1>&2 2>&3)
+        "a" "$(get_label "a" "Basic Apps & Fonts (Web, Mail, VLC)")" \
+        "b" "$(get_label "b" "Multimedia Creation (GIMP, Blender, OBS...)")" \
+        "c" "$(get_label "c" "Dev Tools & Editors (GCC, Python, VSCode, GDB)")" \
+        "d" "$(get_label "d" "NASA Theme (SDDM & Boot)")" \
+        "e" "$(get_label "e" "Upgrade to LATEST Branch")" \
+        "q" "Quit" 3>&1 1>&2 2>&3)
 
     case $MAIN_CHOICE in
         1) initial_setup ;;
@@ -627,12 +688,12 @@ while true; do
         7) samba_config ;;
         8) remote_access_config ;;
         9) vbox_host_config ;;
-        A|a) apps_config ;;
-        B|b) multimedia_config ;;
-        C|c) development_config ;;
-        D|d) nasa_theme ;;
-        E|e) switch_latest ;;
-        Q|q|*) break ;;
+        a) apps_config ;;
+        b) multimedia_config ;;
+        c) development_config ;;
+        d) nasa_theme ;;
+        e) switch_latest ;;
+        q|*) break ;;
     esac
 done
 clear
