@@ -319,7 +319,7 @@ fi
 EOF
         chmod +x /usr/local/share/sddm/scripts/Xsetup
         
-        # Force KDE/MATE X11 User Session resolution
+        # Force KDE/MATE/XFCE X11 User Session resolution
         mkdir -p /usr/local/etc/xdg/autostart/
         cat > /usr/local/etc/xdg/autostart/force-resolution.desktop <<EOF
 [Desktop Entry]
@@ -418,6 +418,8 @@ drm_config() {
     mark_done "3"
 }
 
+# --- DESKTOP ENVIRONMENTS ---
+
 plasma_config() { 
     bsddialog --infobox "Installing Plasma 6 (KDE) and native tools..." 5 60
     pkg install -y --g "plasma6-*" "kf6*"
@@ -430,6 +432,14 @@ mate_config() {
     pkg install -y mate mate-desktop octopkg pavucontrol eom remmina xdg-user-dirs
     mark_done "5"
 }
+
+xfce_config() {
+    bsddialog --infobox "Installing XFCE4 Desktop and Goodies..." 5 50
+    pkg install -y xfce xfce4-goodies octopkg pavucontrol remmina xdg-user-dirs
+    mark_done "6"
+}
+
+# --- SERVICES & APPS ---
 
 samba_config() { 
     pkg install -y samba416
@@ -444,10 +454,9 @@ samba_config() {
     guest ok = yes
 EOF
     sysrc samba_server_enable="YES"; service samba_server restart 2>/dev/null || service samba_server start
-    mark_done "6"
+    mark_done "7"
 }
 
-# --- REMOTE DESKTOP (XRDP & VNC) ---
 remote_access_config() { 
     bsddialog --infobox "Installing XRDP, x11vnc, and Zenity (for Desktop Chooser)..." 5 70
     pkg install -y xrdp xorgxrdp x11vnc zenity
@@ -464,12 +473,15 @@ export LANG=fr_FR.UTF-8
 CHOICE=$(zenity --list --title="Session RDP - FreeBSD" \
     --text="Choisissez votre environnement de bureau :" \
     --radiolist --column="X" --column="Desktop Environment" \
-    TRUE "Plasma 6 (KDE)" FALSE "MATE Desktop" \
+    TRUE "Plasma 6 (KDE)" FALSE "MATE Desktop" FALSE "XFCE4" \
     --width=350 --height=250 2>/dev/null)
 
 case "$CHOICE" in
     "MATE Desktop")
         exec mate-session
+        ;;
+    "XFCE4")
+        exec startxfce4
         ;;
     *)
         # Par défaut (Plasma) si on clique sur OK sans changer ou si on ferme la fenêtre
@@ -509,33 +521,33 @@ EOF
     chmod +x /usr/local/etc/rc.d/x11vnc
     sysrc x11vnc_enable="YES"
     
-    mark_done "7"
+    mark_done "8"
 }
 
 vbox_host_config() {
     if is_vbox_guest; then bsddialog --msgbox "VirtualBox Host blocked inside a VM." 8 50; return; fi
     pkg install -y virtualbox-ose-72; sysrc -f /boot/loader.conf vboxdrv_load="YES" vboxnet_load="YES"; sysrc vboxnet_enable="YES"
     pw groupmod vboxusers -m root; [ -n "$USER_NAME" ] && pw groupmod vboxusers -m "$USER_NAME"
-    mark_done "8"
+    mark_done "9"
 }
 
 apps_config() { 
     bsddialog --infobox "Installing general applications and fonts..." 5 60
     pkg install -y firefox chromium thunderbird vlc ffmpeg webcamd ImageMagick7 cantarell-fonts droid-fonts-ttf inconsolata-ttf noto-basic noto-emoji roboto-fonts-ttf ubuntu-font webfonts terminus-font terminus-ttf
     sysrc webcamd_enable=YES
-    mark_done "9"
+    mark_done "A"
 }
 
 multimedia_config() {
     bsddialog --infobox "Installing Multimedia Creation tools (GIMP, Blender, OBS, etc.)..." 5 70
     pkg install -y gimp inkscape krita blender kdenlive obs-studio audacity ardour ffmpeg gstreamer1-plugins-all
-    mark_done "A"
+    mark_done "B"
 }
 
 development_config() {
     bsddialog --infobox "Installing Development Tools, Editors & Debuggers..." 5 70
     pkg install -y gcc python3 rust gmake cmake pkgconf gdb cgdb neovim vscode
-    mark_done "B"
+    mark_done "C"
 }
 
 nasa_theme() { 
@@ -575,10 +587,10 @@ EOF
     sysrc -f /boot/loader.conf splash_txt_load="YES"
     sysrc -f /boot/loader.conf splash_pcx_load="YES"
     
-    mark_done "C"
+    mark_done "D"
 }
 
-switch_latest() { sed -i '' 's/quarterly/latest/g' /etc/pkg/FreeBSD.conf; pkg update -f && pkg upgrade -y; mark_done "D"; }
+switch_latest() { sed -i '' 's/quarterly/latest/g' /etc/pkg/FreeBSD.conf; pkg update -f && pkg upgrade -y; mark_done "E"; }
 
 # --- MAIN MENU ---
 
@@ -592,14 +604,15 @@ while true; do
         "3" "$(get_label "3" "GPU/VM: DRM-KMOD & VBox Guest Auto-Setup")" \
         "4" "$(get_label "4" "Desktop: Plasma 6 + KDE Tools")" \
         "5" "$(get_label "5" "Desktop: MATE")" \
-        "6" "$(get_label "6" "Samba Server")" \
-        "7" "$(get_label "7" "Remote Access: XRDP (New Session) & x11vnc (Console)")" \
-        "8" "$(get_label "8" "VirtualBox 7.2 Host (Blocked in VM)")" \
-        "9" "$(get_label "9" "Basic Apps & Fonts (Web, Mail, VLC)")" \
-        "A" "$(get_label "A" "Multimedia Creation (GIMP, Blender, OBS...)")" \
-        "B" "$(get_label "B" "Dev Tools & Editors (GCC, Python, VSCode, GDB)")" \
-        "C" "$(get_label "C" "NASA Theme (SDDM & Boot)")" \
-        "D" "$(get_label "D" "Upgrade to LATEST Branch")" \
+        "6" "$(get_label "6" "Desktop: XFCE4")" \
+        "7" "$(get_label "7" "Samba Server")" \
+        "8" "$(get_label "8" "Remote Access: XRDP (New Session) & x11vnc (Console)")" \
+        "9" "$(get_label "9" "VirtualBox 7.2 Host (Blocked in VM)")" \
+        "A" "$(get_label "A" "Basic Apps & Fonts (Web, Mail, VLC)")" \
+        "B" "$(get_label "B" "Multimedia Creation (GIMP, Blender, OBS...)")" \
+        "C" "$(get_label "C" "Dev Tools & Editors (GCC, Python, VSCode, GDB)")" \
+        "D" "$(get_label "D" "NASA Theme (SDDM & Boot)")" \
+        "E" "$(get_label "E" "Upgrade to LATEST Branch")" \
         "Q" "Quit" 3>&1 1>&2 2>&3)
 
     case $MAIN_CHOICE in
@@ -608,14 +621,15 @@ while true; do
         3) drm_config ;;
         4) plasma_config ;;
         5) mate_config ;;
-        6) samba_config ;;
-        7) remote_access_config ;;
-        8) vbox_host_config ;;
-        9) apps_config ;;
-        A|a) multimedia_config ;;
-        B|b) development_config ;;
-        C|c) nasa_theme ;;
-        D|d) switch_latest ;;
+        6) xfce_config ;;
+        7) samba_config ;;
+        8) remote_access_config ;;
+        9) vbox_host_config ;;
+        A|a) apps_config ;;
+        B|b) multimedia_config ;;
+        C|c) development_config ;;
+        D|d) nasa_theme ;;
+        E|e) switch_latest ;;
         Q|q|*) break ;;
     esac
 done
