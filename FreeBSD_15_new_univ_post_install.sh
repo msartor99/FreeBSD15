@@ -430,7 +430,7 @@ drm_config() {
 plasma_config() { 
     bsddialog --infobox "Installing Plasma 6 (KDE) and native tools..." 5 60
     pkg install -y --g "plasma6-*" "kf6*"
-    pkg install -y pavucontrol kate konsole ark remmina dolphin Kvantum octopkg
+    pkg install -y plasma6-plasma pavucontrol kate konsole ark remmina dolphin Kvantum octopkg print-manager cups-pk-helper
     mark_done "4"
 }
 
