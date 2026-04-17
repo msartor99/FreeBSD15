@@ -25,12 +25,14 @@ Enjoy!
 ________________________________________________________________________________________
 
 here is a new version : FreeBSD_15_new_univ_post_install.sh
-
+some enhancement and adjustment
 .
 
 Enjoy!
 
 # new script to switch X11 to Wayland
+
+symply, a switch to install wayland after X11 installation.
 
 switch_to_wayland.sh
 
