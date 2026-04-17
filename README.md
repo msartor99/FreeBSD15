@@ -34,5 +34,7 @@ Enjoy!
 
 symply, a switch to install wayland after X11 installation.
 
+This script installs Wayland, configures it, tests the latest version of the Nvidia drivers, and sets up the driver. Currently, the Nvidia driver crashes the system, but since Nvidia driver development is constantly evolving, I hope future versions will work. In the meantime, this script creates the necessary configuration for Wayland to function on Nvidia. This script checks the current configuration and modifies it without creating duplicates.
+
 switch_to_wayland.sh
 
