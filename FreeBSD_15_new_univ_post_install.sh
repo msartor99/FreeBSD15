@@ -312,6 +312,9 @@ set_monitor_resolution() {
     mkdir -p /usr/local/share/sddm/scripts/
     
     if [ "$RES_CHOICE" != "Native" ]; then
+        # Augmenter la taille de la police de la console (TTY) pour les hautes résolutions
+        sysrc allscreens_flags="-f terminus-b32"
+        
         # Force SDDM Login screen resolution
         cat > /usr/local/share/sddm/scripts/Xsetup <<EOF
 #!/bin/sh
@@ -331,12 +334,13 @@ Name=Force Resolution
 Exec=sh -c "OUTPUT=\$(xrandr | grep ' connected' | awk '{print \$1}' | head -n 1); xrandr --output \$OUTPUT --mode $RES_CHOICE"
 X-KDE-autostart-phase=1
 EOF
-        bsddialog --infobox "Resolution will be forced to $RES_CHOICE via xrandr." 4 60
+        bsddialog --infobox "Resolution will be forced to $RES_CHOICE via xrandr.\nConsole font increased to terminus-b32." 5 60
         sleep 2
     else
         # Native: Clean up scripts if they existed
         rm -f /usr/local/share/sddm/scripts/Xsetup 2>/dev/null
         rm -f /usr/local/etc/xdg/autostart/force-resolution.desktop 2>/dev/null
+        sysrc -x allscreens_flags 2>/dev/null
     fi
 }
 
@@ -439,6 +443,10 @@ mate_config() {
 xfce_config() {
     bsddialog --infobox "Installing XFCE4 Desktop and Goodies..." 5 50
     pkg install -y xfce xfce4-goodies octopkg pavucontrol remmina xdg-user-dirs
+    
+    # Hide experimental XFCE Wayland session from SDDM to prevent accidental black screens
+    rm -f /usr/local/share/wayland-sessions/xfce*.desktop 2>/dev/null
+    
     mark_done "6"
 }
 
