@@ -468,7 +468,7 @@ remote_access_config() {
         chmod 600 /usr/local/etc/x11vnc.pwd
     fi
     
-    # Service script for x11vnc to attach to display :0 automatically
+    # Updated Service script for x11vnc with robust SDDM auth detection and delay to avoid boot race conditions
     cat > /usr/local/etc/rc.d/x11vnc << 'EOF'
 #!/bin/sh
 # REQUIRE: LOGIN dbus sddm
@@ -478,8 +478,10 @@ remote_access_config() {
 
 name="x11vnc"
 rcvar="x11vnc_enable"
-command="/usr/local/bin/x11vnc"
-command_args="-display :0 -auth guess -forever -loop -noxdamage -repeat -rfbauth /usr/local/etc/x11vnc.pwd -rfbport 5900 -shared -bg -o /var/log/x11vnc.log"
+command="/usr/sbin/daemon"
+
+# Use daemon to fork, wait 5s for SDDM to create authority, find it, and exec x11vnc
+command_args="-f sh -c 'sleep 5 && AUTH=\$(find /var/run/sddm -type f | head -n 1) && exec /usr/local/bin/x11vnc -display :0 -auth \"\$AUTH\" -forever -loop -noxdamage -repeat -rfbauth /usr/local/etc/x11vnc.pwd -rfbport 5900 -shared -o /var/log/x11vnc.log'"
 
 load_rc_config $name
 : ${x11vnc_enable:="NO"}
