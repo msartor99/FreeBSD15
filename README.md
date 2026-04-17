@@ -15,9 +15,9 @@ Launch PuTTY to connect to an SSH session as root over the network.
 
 type:
 
-fetch https://raw.githubusercontent.com/msartor99/FreeBSD15/refs/heads/main/FreeBSD_15_universal_post_install.sh
+fetch https://raw.githubusercontent.com/msartor99/FreeBSD15/refs/heads/main/FreeBSD_15_new_univ_post_install.sh
 
-sh FreeBSD_15_universal_post_install.sh
+sh FreeBSD_15_new_univ_post_install.sh
 
 Enjoy!
 
