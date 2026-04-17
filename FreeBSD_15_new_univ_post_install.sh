@@ -75,7 +75,9 @@ initial_setup() {
     sed -i '' 's/^#PermitRootLogin.*/PermitRootLogin yes/' /etc/ssh/sshd_config
     add_line_if_missing "PermitRootLogin yes" /etc/ssh/sshd_config
     service sshd restart
-    freebsd-update fetch install
+    
+    # Bypass the pager to avoid script pausing during updates
+    PAGER=cat freebsd-update fetch install
 
     # Boot & Kernel Tuning
     sysrc -f /boot/loader.conf boot_mute=YES splash_changer_enable=YES autoboot_delay=3
