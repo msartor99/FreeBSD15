@@ -25,8 +25,13 @@ Enjoy!
 ________________________________________________________________________________________
 
 here is a new version : FreeBSD_15_new_univ_post_install.sh
-some enhancement and adjustment
-.
+
+fetch https://raw.githubusercontent.com/msartor99/FreeBSD15/refs/heads/main/FreeBSD_15_new_univ_post_install.sh
+
+sh FreeBSD_15_new_univ_post_install.sh
+
+some enhancement and adjustment.
+
 
 Enjoy!
 
