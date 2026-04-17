@@ -99,8 +99,8 @@ initial_setup() {
 
     # 2. CPU Management & Power/Sensor Configuration
     CPU_TYPE=$(bsddialog --menu "Select CPU Type & Energy Management:" 13 70 2 \
-        "Intel" "Intel Ucode & Coretemp" \
-        "AMD" "AMD Ucode, Amdtemp, IPMI & SMBus (Lenovo P620)" 3>&1 1>&2 2>&3)
+        "Intel CPU" "Intel Ucode & Coretemp" \
+        "AMD CPU" "AMD Ucode, Amdtemp, IPMI & SMBus" 3>&1 1>&2 2>&3)
         
     case $CPU_TYPE in
         Intel) 
@@ -332,7 +332,7 @@ plasma_config() {
 
 mate_config() { 
     bsddialog --infobox "Installing MATE Desktop..." 5 50
-    pkg install -y mate mate-desktop octopkg; mark_done "5"; 
+    pkg install -y mate mate-desktop dsbmixer eom remmina xdg-user-dirs octopkg; mark_done "5"; 
 }
 
 samba_config() { 
