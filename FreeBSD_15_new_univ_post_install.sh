@@ -186,6 +186,10 @@ EOF
             sysrc sddm_lang="en_US"
             
             cat >/usr/local/etc/X11/xorg.conf.d/20-keyboards.conf <<EOF
+Section "ServerFlags"
+    Option "DontZap" "false"
+EndSection
+
 Section "InputClass"
     Identifier "All Keyboards"
     MatchIsKeyboard "yes"
@@ -212,6 +216,10 @@ EOF
             sysrc sddm_lang="fr_CH"
 
             cat >/usr/local/etc/X11/xorg.conf.d/20-keyboards.conf <<EOF
+Section "ServerFlags"
+    Option "DontZap" "false"
+EndSection
+
 Section "InputClass"
     Identifier "All Keyboards"
     MatchIsKeyboard "yes"
@@ -255,6 +263,10 @@ EOF
             fi
 
             cat >/usr/local/etc/X11/xorg.conf.d/20-keyboards.conf <<EOF
+Section "ServerFlags"
+    Option "DontZap" "false"
+EndSection
+
 Section "InputClass"
     Identifier "All Keyboards"
     MatchIsKeyboard "yes"
