@@ -526,17 +526,52 @@ development_config() {
 }
 
 nasa_theme() { 
+    bsddialog --infobox "Downloading and configuring NASA Theme..." 5 60
+    
     [ -d /tmp/fb14_assets ] && rm -rf /tmp/fb14_assets
+    [ -f /tmp/fb14_assets.zip ] && rm -f /tmp/fb14_assets.zip
+    
     fetch -o /tmp/fb14_assets.zip https://github.com/msartor99/FreeBSD14/archive/refs/heads/main.zip
-    unzip -q /tmp/fb14_assets.zip -d /tmp/; mv /tmp/FreeBSD14-main /tmp/fb14_assets
+    unzip -q /tmp/fb14_assets.zip -d /tmp/
+    mv /tmp/FreeBSD14-main /tmp/fb14_assets
+    rm -f /tmp/fb14_assets.zip
+    
+    # --- SDDM Theme ---
     mkdir -p /usr/local/share/sddm/themes/nasa
     cp -r /usr/local/share/sddm/themes/maldives/* /usr/local/share/sddm/themes/nasa/ 2>/dev/null
-    cp -f /tmp/fb14_assets/Main.qml /usr/local/share/sddm/themes/nasa/; cp -f /tmp/fb14_assets/metadata.desktop /usr/local/share/sddm/themes/nasa/
+    cp -f /tmp/fb14_assets/Main.qml /usr/local/share/sddm/themes/nasa/
+    cp -f /tmp/fb14_assets/metadata.desktop /usr/local/share/sddm/themes/nasa/
     cp -f /tmp/fb14_assets/nasa2560login.jpg /usr/local/share/sddm/themes/nasa/background.jpg
-    sed -i '' 's/^background=.*/background=background.jpg/' /usr/local/share/sddm/themes/nasa/theme.conf 2>/dev/null
-    mkdir -p /usr/local/etc/sddm.conf.d; echo "[Theme]\nCurrent=nasa" > /usr/local/etc/sddm.conf.d/theme.conf
-    mkdir -p /boot/images; cp -f /tmp/fb14_assets/nasa1920.png /boot/images/splash.png
-    sysrc -f /boot/loader.conf splash="/boot/images/splash.png" splash_bmp_load="YES" splash_txt_load="YES"
+    
+    if [ -f /usr/local/share/sddm/themes/nasa/theme.conf ]; then
+        sed -i '' 's/^background=.*/background=background.jpg/' /usr/local/share/sddm/themes/nasa/theme.conf
+    fi
+
+    mkdir -p /usr/local/etc/sddm.conf.d
+    cat > /usr/local/etc/sddm.conf.d/theme.conf <<EOF
+[Theme]
+Current=nasa
+EOF
+
+    # --- Boot Menu & Splash (Clean Architecture) ---
+    mkdir -p /boot/images
+    
+    # We copy them under custom names to never overwrite default FreeBSD system files
+    cp -f /tmp/fb14_assets/freebsd-brand-rev.png /boot/images/nasa-brand.png
+    cp -f /tmp/fb14_assets/freebsd-logo-rev.png /boot/images/nasa-logo.png
+    cp -f /tmp/fb14_assets/nasa1920.png /boot/images/splash.png
+    
+    # Tell the bootloader explicitly to use our new custom images
+    sysrc -f /boot/loader.conf loader_brand="/boot/images/nasa-brand.png"
+    sysrc -f /boot/loader.conf loader_logo="/boot/images/nasa-logo.png"
+    sysrc -f /boot/loader.conf loader_color="YES"
+    
+    # Leave the splash screen configuration exactly as is
+    sysrc -f /boot/loader.conf splash="/boot/images/splash.png"
+    sysrc -f /boot/loader.conf splash_bmp_load="YES"
+    sysrc -f /boot/loader.conf splash_txt_load="YES"
+    sysrc -f /boot/loader.conf splash_pcx_load="YES"
+    
     mark_done "e"
 }
 
