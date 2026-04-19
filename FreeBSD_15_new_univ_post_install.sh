@@ -194,6 +194,8 @@ EOF
             echo 'defaultclass=default' > /etc/adduser.conf
             USER_CLASS="default"
             sysrc sddm_lang="en_US"
+            KBD_LAYOUT="us"
+            KBD_VARIANT=""
             
             cat >/usr/local/etc/X11/xorg.conf.d/20-keyboards.conf <<EOF
 Section "ServerFlags"
@@ -224,6 +226,8 @@ EOF
             echo 'defaultclass=french' > /etc/adduser.conf
             USER_CLASS="french"
             sysrc sddm_lang="fr_CH"
+            KBD_LAYOUT="ch"
+            KBD_VARIANT="fr"
 
             cat >/usr/local/etc/X11/xorg.conf.d/20-keyboards.conf <<EOF
 Section "ServerFlags"
@@ -264,6 +268,9 @@ EOF
             
             SDDM_L=$(echo "$CUSTOM_LANG" | cut -d'.' -f1)
             sysrc sddm_lang="$SDDM_L"
+            
+            KBD_LAYOUT="$CUSTOM_KBD"
+            KBD_VARIANT="$CUSTOM_VAR"
 
             [ -n "$CUSTOM_VAR" ] && VAR_STR="Option \"XkbVariant\" \"$CUSTOM_VAR\"" || VAR_STR=""
 
@@ -283,6 +290,26 @@ EOF
             ;;
     esac
 
+    # --- KDE PLASMA 6 GLOBAL KEYBOARD INJECTION ---
+    # This forces Plasma to inherit the chosen layout instead of defaulting to US English
+    mkdir -p /usr/local/etc/xdg
+    cat > /usr/local/etc/xdg/kxkbrc <<EOF
+[Layout]
+DisplayNames=
+LayoutList=${KBD_LAYOUT}
+LayoutLoopCount=-1
+Model=pc105
+ResetOldOptions=true
+ShowFlag=false
+ShowLabel=true
+ShowLayoutIndicator=true
+ShowSingle=false
+SwitchMode=Global
+Use=true
+VariantList=${KBD_VARIANT}
+EOF
+
+    # User creation
     USER_NAME=$(bsddialog --inputbox "User Configuration:\nEnter main user name:" 9 50 3>&1 1>&2 2>&3)
     if [ -n "$USER_NAME" ]; then
         export USER_NAME
@@ -407,8 +434,6 @@ mate_config() {
 xfce_config() {
     bsddialog --infobox "Installing XFCE4 Desktop..." 5 50
     pkg install -y xfce xfce4-goodies octopkg pavucontrol remmina xdg-user-dirs
-    # Hidden wayland sessions just in case dependencies pull them in
-    rm -f /usr/local/share/wayland-sessions/xfce*.desktop 2>/dev/null
     mkdir -p /usr/local/share/xsessions
     cat > /usr/local/share/xsessions/xfce.desktop <<EOF
 [Desktop Entry]
@@ -564,7 +589,7 @@ EOF
     cp -f /tmp/fb14_assets/freebsd-logo-rev.png /boot/images/nasa-logo.png
     cp -f /tmp/fb14_assets/nasa1920.png /boot/images/splash.png
     
-    # 2. Nettoyage des anciennes variables problématiques (Sécurité idempotente)
+    # 2. Nettoyage des anciennes variables problématiques
     sysrc -f /boot/loader.conf -x loader_brand 2>/dev/null
     sysrc -f /boot/loader.conf -x loader_logo 2>/dev/null
     
@@ -580,7 +605,7 @@ EOF
     ln -sf /boot/images/nasa-brand.png /boot/images/freebsd-brand-rev.png
     ln -sf /boot/images/nasa-logo.png /boot/images/freebsd-logo-rev.png
     
-    # 5. Configuration du Splash screen (On ne touche à rien, ça marche !)
+    # 5. Configuration du Splash screen
     sysrc -f /boot/loader.conf loader_color="YES"
     sysrc -f /boot/loader.conf splash="/boot/images/splash.png"
     sysrc -f /boot/loader.conf splash_bmp_load="YES"
@@ -589,6 +614,14 @@ EOF
     
     mark_done "e"
 }
+
+switch_latest() { 
+    local msg="WARNING: Switching to LATEST branch can lead to temporary package breakage or GUI instability. Proceed?"
+    if bsddialog --title "DANGER: LATEST Branch" --defaultno --yesno "$msg" 10 70; then
+        sed -i '' 's/quarterly/latest/g' /etc/pkg/FreeBSD.conf; pkg update -f && pkg upgrade -y; mark_done "f"
+    fi
+}
+
 # --- MAIN MENU ---
 
 show_disclaimer
