@@ -485,11 +485,15 @@ macos_xfce_theme() {
     gtk-update-icon-cache -f -t /usr/local/share/icons/WhiteSur 2>/dev/null
     gtk-update-icon-cache -f -t /usr/local/share/icons/WhiteSur-Dark 2>/dev/null
     
-    # 7. Clean up and restore PATH
+    # 7. Download the WhiteSur Wallpaper directly to the system backgrounds folder
+    mkdir -p /usr/local/share/backgrounds
+    fetch -o /usr/local/share/backgrounds/WhiteSur-light.jpg https://raw.githubusercontent.com/vinceliuice/WhiteSur-wallpapers/main/4k/WhiteSur-light.jpg
+    
+    # 8. Clean up and restore PATH
     rm -rf /tmp/WhiteSur-gtk-theme /tmp/WhiteSur-icon-theme /tmp/gnu_wrap
     export PATH=$OLD_PATH
     
-    # 8. Autostart Plank Dock for all XFCE users
+    # 9. Autostart Plank Dock for all XFCE users
     mkdir -p /usr/local/etc/xdg/autostart
     cat > /usr/local/etc/xdg/autostart/plank.desktop <<EOF
 [Desktop Entry]
@@ -503,20 +507,30 @@ Categories=Utility;
 OnlyShowIn=XFCE;
 EOF
 
-    # 9. Surgically remove the default XFCE bottom panel (Panel 2) from system defaults
+    # 10. Surgically remove the default XFCE bottom panel (Panel 2) from system defaults
     if [ -f /usr/local/etc/xdg/xfce4/panel/default.xml ]; then
         sed -i '' '/<value type="int" value="2"\/>/d' /usr/local/etc/xdg/xfce4/panel/default.xml
     fi
-    # Also patch existing user profiles just in case
     for user_home in /home/* /root; do
         panel_xml="$user_home/.config/xfce4/xfconf/xfce-perchannel-xml/xfce4-panel.xml"
         if [ -f "$panel_xml" ]; then
             sed -i '' '/<value type="int" value="2"\/>/d' "$panel_xml"
         fi
     done
+
+    # 11. The Ultimate Magic: Auto-Apply all theme settings on first GUI login!
+    cat > /usr/local/etc/xdg/autostart/whitesur-auto-apply.desktop <<'EOF'
+[Desktop Entry]
+Name=Apply WhiteSur Theme
+Comment=Applies Mac theme automatically on first login
+Exec=sh -c 'if [ ! -f ~/.whitesur_applied ]; then sleep 3; xfconf-query -c xsettings -p /Net/ThemeName -s "WhiteSur-Dark" --create -t string; xfconf-query -c xsettings -p /Net/IconThemeName -s "WhiteSur" --create -t string; xfconf-query -c xfwm4 -p /general/theme -s "WhiteSur-Dark" --create -t string; gsettings set net.launchpad.plank.dock.settings:/net/launchpad/plank/docks/dock1/ theme "WhiteSur"; for prop in $(xfconf-query -c xfce4-desktop -p /backdrop -l | grep -E "last-image$"); do xfconf-query -c xfce4-desktop -p "$prop" -s "/usr/local/share/backgrounds/WhiteSur-light.jpg"; done; touch ~/.whitesur_applied; fi'
+Terminal=false
+Type=Application
+OnlyShowIn=XFCE;
+EOF
     
-    local msg="WhiteSur Theme & Plank Dock installed!\n\nTo apply it, log into XFCE and go to:\n\n1. Settings > Appearance > Style: 'WhiteSur'\n2. Settings > Appearance > Icons: 'WhiteSur'\n3. Window Manager > Style: 'WhiteSur'\n4. Press Ctrl+RightClick on the new Dock at the bottom, select Preferences, and change its theme to WhiteSur!\n\n(The script automatically removed the default bottom panel for future logins)."
-    bsddialog --msgbox "$msg" 18 75
+    local msg="WhiteSur Theme, Plank Dock & Wallpaper installed and completely AUTOMATED!\n\nWhen you log into XFCE for the first time, everything (Windows, Icons, Dock, and Wallpaper) will transform into macOS automatically.\n\n(The script also removed the default bottom panel for future logins)."
+    bsddialog --msgbox "$msg" 16 75
 }
 
 xfce_config() {
@@ -532,7 +546,7 @@ Type=Application
 DesktopNames=XFCE
 EOF
     
-    local theme_msg="Do you want to install the WhiteSur macOS Theme for XFCE4?\n\n(This will download the theme, icons, and configure the Plank Mac Dock for your desktop)"
+    local theme_msg="Do you want to install the WhiteSur macOS Theme for XFCE4?\n\n(This will download the theme, icons, and fully automate the Mac layout for your first login)"
     if bsddialog --title "XFCE4 macOS Theme" --yesno "$theme_msg" 8 65; then
         macos_xfce_theme
     fi
