@@ -430,10 +430,88 @@ gpu_config() {
 
 # --- DESKTOP ENVIRONMENTS ---
 
+macos_plasma_theme() {
+    bsddialog --infobox "Downloading and building WhiteSur macOS Theme for KDE Plasma 6 & SDDM...\n(Extracting files globally for all users)" 6 70
+    
+    pkg install -y bash git sassc glib coreutils gsed qt5-graphicaleffects qt5-quickcontrols2
+    
+    # Wrap GNU tools for icon script compatibility
+    mkdir -p /tmp/gnu_wrap
+    ln -sf /usr/local/bin/greadlink /tmp/gnu_wrap/readlink
+    ln -sf /usr/local/bin/gsed /tmp/gnu_wrap/sed
+    echo '#!/bin/sh' > /tmp/gnu_wrap/setterm
+    echo 'exit 0' >> /tmp/gnu_wrap/setterm
+    chmod +x /tmp/gnu_wrap/setterm
+    OLD_PATH=$PATH
+    export PATH="/tmp/gnu_wrap:$PATH"
+    
+    [ -d /tmp/WhiteSur-kde ] && rm -rf /tmp/WhiteSur-kde
+    [ -d /tmp/WhiteSur-icon-theme ] && rm -rf /tmp/WhiteSur-icon-theme
+    
+    # 1. KDE Theme (Manual Global Extraction - The "FreeBSD Way")
+    git clone https://github.com/vinceliuice/WhiteSur-kde.git /tmp/WhiteSur-kde
+    mkdir -p /usr/local/share/color-schemes
+    mkdir -p /usr/local/share/plasma/desktoptheme
+    mkdir -p /usr/local/share/plasma/look-and-feel
+    mkdir -p /usr/local/share/aurorae/themes
+    mkdir -p /usr/local/share/Kvantum
+    cp -r /tmp/WhiteSur-kde/color-schemes/* /usr/local/share/color-schemes/ 2>/dev/null
+    cp -r /tmp/WhiteSur-kde/plasma/desktoptheme/* /usr/local/share/plasma/desktoptheme/ 2>/dev/null
+    cp -r /tmp/WhiteSur-kde/plasma/look-and-feel/* /usr/local/share/plasma/look-and-feel/ 2>/dev/null
+    cp -r /tmp/WhiteSur-kde/aurorae/* /usr/local/share/aurorae/themes/ 2>/dev/null
+    cp -r /tmp/WhiteSur-kde/Kvantum/* /usr/local/share/Kvantum/ 2>/dev/null
+    
+    # 2. Icons
+    git clone https://github.com/vinceliuice/WhiteSur-icon-theme.git /tmp/WhiteSur-icon-theme
+    cd /tmp/WhiteSur-icon-theme
+    mkdir -p /usr/local/share/icons
+    bash ./install.sh -d /usr/local/share/icons -a
+    gtk-update-icon-cache -f -t /usr/local/share/icons/WhiteSur 2>/dev/null
+    gtk-update-icon-cache -f -t /usr/local/share/icons/WhiteSur-Dark 2>/dev/null
+    
+    # 3. Download Wallpaper
+    mkdir -p /usr/local/share/backgrounds
+    fetch -o /usr/local/share/backgrounds/WhiteSur-light.jpg https://raw.githubusercontent.com/vinceliuice/WhiteSur-wallpapers/main/4k/WhiteSur-light.jpg
+    
+    # 4. SDDM Theme
+    mkdir -p /usr/local/share/sddm/themes
+    cp -r /tmp/WhiteSur-kde/sddm/WhiteSur /usr/local/share/sddm/themes/ 2>/dev/null
+    mkdir -p /usr/local/etc/sddm.conf.d
+    echo "[Theme]" > /usr/local/etc/sddm.conf.d/theme.conf
+    echo "Current=WhiteSur" >> /usr/local/etc/sddm.conf.d/theme.conf
+    if [ -f /usr/local/share/sddm/themes/WhiteSur/theme.conf ]; then
+        sed -i '' 's|^background=.*|background=/usr/local/share/backgrounds/WhiteSur-light.jpg|' /usr/local/share/sddm/themes/WhiteSur/theme.conf
+    fi
+    
+    rm -rf /tmp/WhiteSur-kde /tmp/WhiteSur-icon-theme /tmp/gnu_wrap
+    export PATH=$OLD_PATH
+    
+    # 5. First Boot Autostart Magic for KDE Plasma
+    mkdir -p /usr/local/etc/xdg/autostart
+    cat > /usr/local/etc/xdg/autostart/whitesur-plasma-apply.desktop <<'EOF'
+[Desktop Entry]
+Name=Apply WhiteSur KDE Theme
+Comment=Applies Mac theme automatically on first login
+Exec=sh -c 'if [ ! -f ~/.whitesur_kde_applied ]; then sleep 4; lookandfeeltool -a com.github.vinceliuice.WhiteSur-Dark; plasma-apply-wallpaperimage /usr/local/share/backgrounds/WhiteSur-light.jpg; touch ~/.whitesur_kde_applied; fi'
+Terminal=false
+Type=Application
+OnlyShowIn=KDE;
+EOF
+    
+    local msg="WhiteSur Theme, Icons, Wallpaper & SDDM Login Screen installed for Plasma 6!\n\nWhen you log into Plasma for the first time, everything will transform into macOS automatically.\n\nTip for the Mac Dock:\nPlasma 6 has a powerful built-in panel! Right-click your bottom panel -> 'Enter Edit Mode'. Change its width to 'Fit Content', center it, and enable 'Auto-Hide' to make a perfect Mac Dock!"
+    bsddialog --msgbox "$msg" 18 75
+}
+
 plasma_config() { 
     bsddialog --infobox "Installing Plasma 6 (KDE) + Printers + KWallet..." 5 65
     pkg install -y --g "plasma6-*" "kf6*"
     pkg install -y pavucontrol kate konsole ark remmina dolphin Kvantum octopkg plasma6-print-manager kwalletmanager
+    
+    local theme_msg="Do you want to install the WhiteSur macOS Theme for KDE Plasma 6?\n\n(This will download the theme, icons, SDDM Login, and fully automate the Mac layout for your first login)"
+    if bsddialog --title "KDE Plasma macOS Theme" --yesno "$theme_msg" 8 70; then
+        macos_plasma_theme
+    fi
+    
     mark_done "3"
 }
 
@@ -446,10 +524,8 @@ mate_config() {
 macos_xfce_theme() {
     bsddialog --infobox "Downloading and building WhiteSur macOS Theme for XFCE4 & SDDM...\n(This might take a moment to fetch from GitHub)" 6 65
     
-    # 1. Install dependencies AND GNU core utilities for Linux script compatibility
     pkg install -y bash git gtk-murrine-engine gtk-engines2 sassc glib coreutils gsed plank qt5-graphicaleffects qt5-quickcontrols2
     
-    # 2. The UNIX Trick: Wrap GNU tools and fake 'setterm' to fool the Linux script
     mkdir -p /tmp/gnu_wrap
     ln -sf /usr/local/bin/greadlink /tmp/gnu_wrap/readlink
     ln -sf /usr/local/bin/gsed /tmp/gnu_wrap/sed
@@ -457,56 +533,45 @@ macos_xfce_theme() {
     echo 'exit 0' >> /tmp/gnu_wrap/setterm
     chmod +x /tmp/gnu_wrap/setterm
     
-    # Backup original PATH and force our wrapper first
     OLD_PATH=$PATH
     export PATH="/tmp/gnu_wrap:$PATH"
     
-    # 3. Cleanup previous tmp folders if they exist
     [ -d /tmp/WhiteSur-gtk-theme ] && rm -rf /tmp/WhiteSur-gtk-theme
     [ -d /tmp/WhiteSur-icon-theme ] && rm -rf /tmp/WhiteSur-icon-theme
     [ -d /tmp/WhiteSur-kde ] && rm -rf /tmp/WhiteSur-kde
     
-    # 4. Clone and install the GTK Window Theme globally
     git clone https://github.com/vinceliuice/WhiteSur-gtk-theme.git /tmp/WhiteSur-gtk-theme
     cd /tmp/WhiteSur-gtk-theme
     mkdir -p /usr/local/share/themes
     bash ./install.sh -d /usr/local/share/themes -t all -N glassy
     
-    # Copy the Plank theme specifically for all users
     mkdir -p /usr/local/share/plank/themes
     cp -r src/other/plank/theme-* /usr/local/share/plank/themes/ 2>/dev/null
     
-    # 5. Clone and install the Icon Theme globally
     git clone https://github.com/vinceliuice/WhiteSur-icon-theme.git /tmp/WhiteSur-icon-theme
     cd /tmp/WhiteSur-icon-theme
     mkdir -p /usr/local/share/icons
     bash ./install.sh -d /usr/local/share/icons -a
     
-    # 6. Build the GTK icon cache for blazing fast load times
     gtk-update-icon-cache -f -t /usr/local/share/icons/WhiteSur 2>/dev/null
     gtk-update-icon-cache -f -t /usr/local/share/icons/WhiteSur-Dark 2>/dev/null
     
-    # 7. Download the WhiteSur Wallpaper directly to the system backgrounds folder
     mkdir -p /usr/local/share/backgrounds
     fetch -o /usr/local/share/backgrounds/WhiteSur-light.jpg https://raw.githubusercontent.com/vinceliuice/WhiteSur-wallpapers/main/4k/WhiteSur-light.jpg
     
-    # 8. Install and Configure the WhiteSur SDDM Login Theme
     git clone https://github.com/vinceliuice/WhiteSur-kde.git /tmp/WhiteSur-kde
     mkdir -p /usr/local/share/sddm/themes
     cp -r /tmp/WhiteSur-kde/sddm/WhiteSur /usr/local/share/sddm/themes/ 2>/dev/null
     mkdir -p /usr/local/etc/sddm.conf.d
     echo "[Theme]" > /usr/local/etc/sddm.conf.d/theme.conf
     echo "Current=WhiteSur" >> /usr/local/etc/sddm.conf.d/theme.conf
-    # Link the SDDM background to our downloaded wallpaper
     if [ -f /usr/local/share/sddm/themes/WhiteSur/theme.conf ]; then
         sed -i '' 's|^background=.*|background=/usr/local/share/backgrounds/WhiteSur-light.jpg|' /usr/local/share/sddm/themes/WhiteSur/theme.conf
     fi
     
-    # 9. Clean up and restore PATH
     rm -rf /tmp/WhiteSur-gtk-theme /tmp/WhiteSur-icon-theme /tmp/WhiteSur-kde /tmp/gnu_wrap
     export PATH=$OLD_PATH
     
-    # 10. Autostart Plank Dock for all XFCE users
     mkdir -p /usr/local/etc/xdg/autostart
     cat > /usr/local/etc/xdg/autostart/plank.desktop <<EOF
 [Desktop Entry]
@@ -520,7 +585,6 @@ Categories=Utility;
 OnlyShowIn=XFCE;
 EOF
 
-    # 11. Surgically remove the default XFCE bottom panel (Panel 2) from system defaults
     if [ -f /usr/local/etc/xdg/xfce4/panel/default.xml ]; then
         sed -i '' '/<value type="int" value="2"\/>/d' /usr/local/etc/xdg/xfce4/panel/default.xml
     fi
@@ -531,7 +595,6 @@ EOF
         fi
     done
 
-    # 12. The Ultimate Magic: Auto-Apply all theme settings on first GUI login!
     cat > /usr/local/etc/xdg/autostart/whitesur-auto-apply.desktop <<'EOF'
 [Desktop Entry]
 Name=Apply WhiteSur Theme
@@ -771,7 +834,7 @@ while true; do
         --menu "Select Installation Step:" 26 88 19 \
         "1" "$(get_label "1" "Initial Setup (System, Hardware, Lang, User)")" \
         "2" "$(get_label "2" "GPU Auto-Config (Intel/AMD/NVIDIA/Hybrid)")" \
-        "3" "$(get_label "3" "Desktop: Plasma 6 + Printing + KWallet")" \
+        "3" "$(get_label "3" "Desktop: Plasma 6 (With optional macOS Theme)")" \
         "4" "$(get_label "4" "Desktop: MATE")" \
         "5" "$(get_label "5" "Desktop: XFCE4 (With optional macOS Theme)")" \
         "6" "$(get_label "6" "Basic Apps & Fonts + Webcam Support")" \
