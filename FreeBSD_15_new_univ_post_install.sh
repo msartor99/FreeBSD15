@@ -180,6 +180,12 @@ EOF
         "Swiss_French" "Swiss French Locales (CH/FR Keyboard)" \
         "Custom" "Define custom Country and Keyboard" 3>&1 1>&2 2>&3)
 
+    if bsddialog --title "Keyboard Type" --yesno "Are you using an Apple Mac keyboard?\n(This ensures correct mapping for @, Command ⌘, etc.)" 8 60; then
+        IS_MAC="YES"
+    else
+        IS_MAC="NO"
+    fi
+
     clean_locales
     mkdir -p /usr/local/etc/X11/xorg.conf.d/
 
@@ -189,7 +195,9 @@ EOF
             USER_CLASS="default"
             sysrc sddm_lang="en_US"
             KBD_LAYOUT="us"
-            KBD_VARIANT=""
+            [ "$IS_MAC" = "YES" ] && KBD_VARIANT="mac" || KBD_VARIANT=""
+            
+            [ -n "$KBD_VARIANT" ] && VAR_STR="Option \"XkbVariant\" \"$KBD_VARIANT\"" || VAR_STR=""
             
             cat >/usr/local/etc/X11/xorg.conf.d/20-keyboards.conf <<EOF
 Section "ServerFlags"
@@ -199,7 +207,8 @@ EndSection
 Section "InputClass"
     Identifier "All Keyboards"
     MatchIsKeyboard "yes"
-    Option "XkbLayout" "us"
+    Option "XkbLayout" "$KBD_LAYOUT"
+    $VAR_STR
     Option "XkbOptions" "terminate:ctrl_alt_bksp"
 EndSection
 EOF
@@ -221,7 +230,7 @@ EOF
             USER_CLASS="french"
             sysrc sddm_lang="fr_CH"
             KBD_LAYOUT="ch"
-            KBD_VARIANT="fr"
+            [ "$IS_MAC" = "YES" ] && KBD_VARIANT="fr-mac" || KBD_VARIANT="fr"
 
             cat >/usr/local/etc/X11/xorg.conf.d/20-keyboards.conf <<EOF
 Section "ServerFlags"
@@ -231,8 +240,8 @@ EndSection
 Section "InputClass"
     Identifier "All Keyboards"
     MatchIsKeyboard "yes"
-    Option "XkbLayout" "ch"
-    Option "XkbVariant" "fr"
+    Option "XkbLayout" "$KBD_LAYOUT"
+    Option "XkbVariant" "$KBD_VARIANT"
     Option "XkbOptions" "terminate:ctrl_alt_bksp"
 EndSection
 EOF
@@ -244,6 +253,7 @@ EOF
             
             [ -z "$CUSTOM_LANG" ] && CUSTOM_LANG="en_US.UTF-8"
             [ -z "$CUSTOM_KBD" ] && CUSTOM_KBD="us"
+            [ -z "$CUSTOM_VAR" ] && [ "$IS_MAC" = "YES" ] && CUSTOM_VAR="mac"
 
             cat >> /etc/login.conf <<EOF
 
@@ -544,8 +554,8 @@ bluetooth_config() {
 }
 
 macbook_2010_config() {
-    local msg="WARNING: This will configure legacy Broadcom Wi-Fi, FireWire, and Apple Trackpad.\n\nYou MUST have an active Ethernet connection right now to download the proprietary Wi-Fi firmware.\n\nContinue?"
-    if ! bsddialog --title "MacBook Pro 2010" --defaultno --yesno "$msg" 10 65; then
+    local msg="WARNING: This will configure legacy Broadcom Wi-Fi, FireWire, Apple SMC (Keyboard backlight/Fans) and Apple Trackpad.\n\nYou MUST have an active Ethernet connection right now to download the proprietary Wi-Fi firmware.\n\nContinue?"
+    if ! bsddialog --title "MacBook Pro 2010" --defaultno --yesno "$msg" 10 70; then
         return
     fi
 
@@ -556,15 +566,18 @@ macbook_2010_config() {
     sysrc -f /boot/loader.conf if_bwn_load="YES"
     sysrc -f /boot/loader.conf bwn_v4_ucode_load="YES"
 
-    # 2. Trackpad Multitouch (Wellspring)
+    # 2. Apple SMC (Keyboard Backlight, Fans, Sensors)
+    sysrc -f /boot/loader.conf asmc_load="YES"
+
+    # 3. Trackpad Multitouch (Wellspring)
     sysrc -f /boot/loader.conf wsp_load="YES"
 
-    # 3. FireWire
+    # 4. FireWire
     ! sysrc -n kld_list | grep -q "firewire" && sysrc kld_list+="firewire"
 
-    # 4. Warnings for GPU & Audio
-    local warn_msg="MACBOOK 2010 POST-INSTALL TIPS:\n\n1. GPU: Do NOT use the NVIDIA Option (2) on this machine! Use Option 3 (DRM-KMOD) which will safely load the open-source 'nouveau' driver.\n\n2. AUDIO: The Cirrus Logic sound card is complex. If sound is weak or wrong, run 'cat /dev/sndstat' in terminal to find your speakers, then set 'sysctl hw.snd.default_unit=X' (replace X with the correct number)."
-    bsddialog --msgbox "$warn_msg" 14 75
+    # 5. Warnings for GPU, Audio & Keyboard
+    local warn_msg="MACBOOK 2010 POST-INSTALL TIPS:\n\n1. KEYBOARD: This is handled! Just answer YES when Option 1 asks if you are using an Apple Mac keyboard.\n\n2. GPU: Do NOT use the NVIDIA Option (2)! Use Option 3 (DRM-KMOD) for the safe 'nouveau' driver.\n\n3. AUDIO: Run 'cat /dev/sndstat' to find speakers, then set 'sysctl hw.snd.default_unit=X'."
+    bsddialog --msgbox "$warn_msg" 16 75
 
     mark_done "h"
 }
