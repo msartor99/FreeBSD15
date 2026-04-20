@@ -444,10 +444,10 @@ mate_config() {
 }
 
 macos_xfce_theme() {
-    bsddialog --infobox "Downloading and building WhiteSur macOS Theme for XFCE4...\n(This might take a moment to fetch from GitHub)" 6 65
+    bsddialog --infobox "Downloading and building WhiteSur macOS Theme for XFCE4 & SDDM...\n(This might take a moment to fetch from GitHub)" 6 65
     
     # 1. Install dependencies AND GNU core utilities for Linux script compatibility
-    pkg install -y bash git gtk-murrine-engine gtk-engines2 sassc glib coreutils gsed plank
+    pkg install -y bash git gtk-murrine-engine gtk-engines2 sassc glib coreutils gsed plank qt5-graphicaleffects qt5-quickcontrols2
     
     # 2. The UNIX Trick: Wrap GNU tools and fake 'setterm' to fool the Linux script
     mkdir -p /tmp/gnu_wrap
@@ -464,6 +464,7 @@ macos_xfce_theme() {
     # 3. Cleanup previous tmp folders if they exist
     [ -d /tmp/WhiteSur-gtk-theme ] && rm -rf /tmp/WhiteSur-gtk-theme
     [ -d /tmp/WhiteSur-icon-theme ] && rm -rf /tmp/WhiteSur-icon-theme
+    [ -d /tmp/WhiteSur-kde ] && rm -rf /tmp/WhiteSur-kde
     
     # 4. Clone and install the GTK Window Theme globally
     git clone https://github.com/vinceliuice/WhiteSur-gtk-theme.git /tmp/WhiteSur-gtk-theme
@@ -489,11 +490,23 @@ macos_xfce_theme() {
     mkdir -p /usr/local/share/backgrounds
     fetch -o /usr/local/share/backgrounds/WhiteSur-light.jpg https://raw.githubusercontent.com/vinceliuice/WhiteSur-wallpapers/main/4k/WhiteSur-light.jpg
     
-    # 8. Clean up and restore PATH
-    rm -rf /tmp/WhiteSur-gtk-theme /tmp/WhiteSur-icon-theme /tmp/gnu_wrap
+    # 8. Install and Configure the WhiteSur SDDM Login Theme
+    git clone https://github.com/vinceliuice/WhiteSur-kde.git /tmp/WhiteSur-kde
+    mkdir -p /usr/local/share/sddm/themes
+    cp -r /tmp/WhiteSur-kde/sddm/WhiteSur /usr/local/share/sddm/themes/ 2>/dev/null
+    mkdir -p /usr/local/etc/sddm.conf.d
+    echo "[Theme]" > /usr/local/etc/sddm.conf.d/theme.conf
+    echo "Current=WhiteSur" >> /usr/local/etc/sddm.conf.d/theme.conf
+    # Link the SDDM background to our downloaded wallpaper
+    if [ -f /usr/local/share/sddm/themes/WhiteSur/theme.conf ]; then
+        sed -i '' 's|^background=.*|background=/usr/local/share/backgrounds/WhiteSur-light.jpg|' /usr/local/share/sddm/themes/WhiteSur/theme.conf
+    fi
+    
+    # 9. Clean up and restore PATH
+    rm -rf /tmp/WhiteSur-gtk-theme /tmp/WhiteSur-icon-theme /tmp/WhiteSur-kde /tmp/gnu_wrap
     export PATH=$OLD_PATH
     
-    # 9. Autostart Plank Dock for all XFCE users
+    # 10. Autostart Plank Dock for all XFCE users
     mkdir -p /usr/local/etc/xdg/autostart
     cat > /usr/local/etc/xdg/autostart/plank.desktop <<EOF
 [Desktop Entry]
@@ -507,7 +520,7 @@ Categories=Utility;
 OnlyShowIn=XFCE;
 EOF
 
-    # 10. Surgically remove the default XFCE bottom panel (Panel 2) from system defaults
+    # 11. Surgically remove the default XFCE bottom panel (Panel 2) from system defaults
     if [ -f /usr/local/etc/xdg/xfce4/panel/default.xml ]; then
         sed -i '' '/<value type="int" value="2"\/>/d' /usr/local/etc/xdg/xfce4/panel/default.xml
     fi
@@ -518,7 +531,7 @@ EOF
         fi
     done
 
-    # 11. The Ultimate Magic: Auto-Apply all theme settings on first GUI login!
+    # 12. The Ultimate Magic: Auto-Apply all theme settings on first GUI login!
     cat > /usr/local/etc/xdg/autostart/whitesur-auto-apply.desktop <<'EOF'
 [Desktop Entry]
 Name=Apply WhiteSur Theme
@@ -529,7 +542,7 @@ Type=Application
 OnlyShowIn=XFCE;
 EOF
     
-    local msg="WhiteSur Theme, Plank Dock & Wallpaper installed and completely AUTOMATED!\n\nWhen you log into XFCE for the first time, everything (Windows, Icons, Dock, and Wallpaper) will transform into macOS automatically.\n\n(The script also removed the default bottom panel for future logins)."
+    local msg="WhiteSur Theme, Plank Dock, Wallpaper & SDDM Login Screen installed and completely AUTOMATED!\n\nWhen you reboot, your login screen will be macOS styled.\nWhen you log into XFCE for the first time, everything (Windows, Icons, Dock, and Wallpaper) will transform automatically."
     bsddialog --msgbox "$msg" 16 75
 }
 
@@ -546,8 +559,8 @@ Type=Application
 DesktopNames=XFCE
 EOF
     
-    local theme_msg="Do you want to install the WhiteSur macOS Theme for XFCE4?\n\n(This will download the theme, icons, and fully automate the Mac layout for your first login)"
-    if bsddialog --title "XFCE4 macOS Theme" --yesno "$theme_msg" 8 65; then
+    local theme_msg="Do you want to install the WhiteSur macOS Theme for XFCE4?\n\n(This will download the theme, icons, SDDM Login, and fully automate the Mac layout for your first login)"
+    if bsddialog --title "XFCE4 macOS Theme" --yesno "$theme_msg" 8 70; then
         macos_xfce_theme
     fi
     mark_done "5"
