@@ -445,21 +445,49 @@ mate_config() {
 
 macos_xfce_theme() {
     bsddialog --infobox "Downloading and building WhiteSur macOS Theme for XFCE4...\n(This might take a moment to fetch from GitHub)" 6 65
-    pkg install -y bash git gtk-murrine-engine gtk-engines2 sassc glib
+    
+    # 1. Install dependencies AND GNU core utilities for Linux script compatibility
+    pkg install -y bash git gtk-murrine-engine gtk-engines2 sassc glib coreutils gsed
+    
+    # 2. The UNIX Trick: Wrap GNU tools and fake 'setterm' to fool the Linux script
+    mkdir -p /tmp/gnu_wrap
+    ln -sf /usr/local/bin/greadlink /tmp/gnu_wrap/readlink
+    ln -sf /usr/local/bin/gsed /tmp/gnu_wrap/sed
+    echo '#!/bin/sh' > /tmp/gnu_wrap/setterm
+    echo 'exit 0' >> /tmp/gnu_wrap/setterm
+    chmod +x /tmp/gnu_wrap/setterm
+    
+    # Backup original PATH and force our wrapper first
+    OLD_PATH=$PATH
+    export PATH="/tmp/gnu_wrap:$PATH"
+    
+    # 3. Cleanup previous tmp folders if they exist
     [ -d /tmp/WhiteSur-gtk-theme ] && rm -rf /tmp/WhiteSur-gtk-theme
     [ -d /tmp/WhiteSur-icon-theme ] && rm -rf /tmp/WhiteSur-icon-theme
+    
+    # 4. Clone and install the GTK Window Theme globally
     git clone https://github.com/vinceliuice/WhiteSur-gtk-theme.git /tmp/WhiteSur-gtk-theme
-    cd /tmp/WhiteSur-gtk-theme; mkdir -p /usr/local/share/themes
+    cd /tmp/WhiteSur-gtk-theme
+    mkdir -p /usr/local/share/themes
     bash ./install.sh -d /usr/local/share/themes -t all -N glassy
+    
+    # 5. Clone and install the Icon Theme globally
     git clone https://github.com/vinceliuice/WhiteSur-icon-theme.git /tmp/WhiteSur-icon-theme
-    cd /tmp/WhiteSur-icon-theme; mkdir -p /usr/local/share/icons
+    cd /tmp/WhiteSur-icon-theme
+    mkdir -p /usr/local/share/icons
     bash ./install.sh -d /usr/local/share/icons -a
-    rm -rf /tmp/WhiteSur-gtk-theme /tmp/WhiteSur-icon-theme
+    
+    # 6. Build the GTK icon cache for blazing fast load times
+    gtk-update-icon-cache -f -t /usr/local/share/icons/WhiteSur 2>/dev/null
+    gtk-update-icon-cache -f -t /usr/local/share/icons/WhiteSur-Dark 2>/dev/null
+    
+    # 7. Clean up and restore PATH
+    rm -rf /tmp/WhiteSur-gtk-theme /tmp/WhiteSur-icon-theme /tmp/gnu_wrap
+    export PATH=$OLD_PATH
     
     local msg="WhiteSur Theme installed globally!\n\nTo apply it, log into your XFCE session and go to:\n\n1. Settings > Appearance > Style: Choose 'WhiteSur-Light' (or Dark)\n2. Settings > Appearance > Icons: Choose 'WhiteSur'\n3. Window Manager > Style: Choose 'WhiteSur'\n\nTip: Add a second panel at the bottom of the screen to act as a Mac Dock!"
     bsddialog --msgbox "$msg" 16 75
 }
-
 xfce_config() {
     bsddialog --infobox "Installing XFCE4 Desktop..." 5 50
     pkg install -y xfce xfce4-goodies octopkg pavucontrol remmina xdg-user-dirs
