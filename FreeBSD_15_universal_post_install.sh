@@ -434,7 +434,7 @@ gpu_config() {
 # --- DESKTOP ENVIRONMENTS ---
 
 macos_plasma_theme() {
-    bsddialog --infobox "Downloading and building WhiteSur macOS Theme for KDE Plasma 6 & SDDM...\n(Extracting files globally for all users)" 6 70
+    bsddialog --infobox "Downloading and building WhiteSur macOS Theme for KDE Plasma 6...\n(Extracting files globally for all users)" 6 70
     
     pkg install -y bash git sassc glib coreutils gsed qt5-graphicaleffects qt5-quickcontrols2 qt5-svg qt5-imageformats kf5-plasma-framework qt5-quickcontrols
     
@@ -472,13 +472,16 @@ macos_plasma_theme() {
     mkdir -p /usr/local/share/backgrounds
     fetch -o /usr/local/share/backgrounds/WhiteSur-light.jpg https://raw.githubusercontent.com/vinceliuice/WhiteSur-wallpapers/main/4k/WhiteSur-light.jpg
     
-    mkdir -p /usr/local/share/sddm/themes
-    cp -r /tmp/WhiteSur-kde/sddm/WhiteSur /usr/local/share/sddm/themes/ 2>/dev/null
-    mkdir -p /usr/local/etc/sddm.conf.d
-    echo "[Theme]" > /usr/local/etc/sddm.conf.d/theme.conf
-    echo "Current=WhiteSur" >> /usr/local/etc/sddm.conf.d/theme.conf
-    if [ -f /usr/local/share/sddm/themes/WhiteSur/theme.conf ]; then
-        sed -i '' 's|^background=.*|background=/usr/local/share/backgrounds/WhiteSur-light.jpg|' /usr/local/share/sddm/themes/WhiteSur/theme.conf
+    # DEMANDE A L'UTILISATEUR POUR SDDM
+    if bsddialog --title "Login Screen (SDDM)" --yesno "Do you want to install the macOS style Login Screen (WhiteSur)?\n\nSelect 'No' if you want to keep the NASA theme or the default screen." 10 70; then
+        mkdir -p /usr/local/share/sddm/themes
+        cp -r /tmp/WhiteSur-kde/sddm/WhiteSur /usr/local/share/sddm/themes/ 2>/dev/null
+        mkdir -p /usr/local/etc/sddm.conf.d
+        echo "[Theme]" > /usr/local/etc/sddm.conf.d/theme.conf
+        echo "Current=WhiteSur" >> /usr/local/etc/sddm.conf.d/theme.conf
+        if [ -f /usr/local/share/sddm/themes/WhiteSur/theme.conf ]; then
+            sed -i '' 's|^background=.*|background=/usr/local/share/backgrounds/WhiteSur-light.jpg|' /usr/local/share/sddm/themes/WhiteSur/theme.conf
+        fi
     fi
     
     rm -rf /tmp/WhiteSur-kde /tmp/WhiteSur-icon-theme /tmp/gnu_wrap
@@ -495,7 +498,7 @@ Type=Application
 OnlyShowIn=KDE;
 EOF
     
-    local msg="WhiteSur Theme, Icons, Wallpaper & SDDM Login Screen installed for Plasma 6!\n\nWhen you log into Plasma for the first time, everything will transform into macOS automatically.\n\nTip for the Mac Dock:\nPlasma 6 has a powerful built-in panel! Right-click your bottom panel -> 'Enter Edit Mode'. Change its width to 'Fit Content', center it, and enable 'Auto-Hide' to make a perfect Mac Dock!"
+    local msg="WhiteSur Theme, Icons, and Wallpaper installed for Plasma 6!\n\nWhen you log into Plasma for the first time, everything will transform into macOS automatically.\n\nTip for the Mac Dock:\nPlasma 6 has a powerful built-in panel! Right-click your bottom panel -> 'Enter Edit Mode'. Change its width to 'Fit Content', center it, and enable 'Auto-Hide' to make a perfect Mac Dock!"
     bsddialog --msgbox "$msg" 18 75
 }
 
@@ -504,7 +507,7 @@ plasma_config() {
     pkg install -y --g "plasma6-*" "kf6*"
     pkg install -y pavucontrol kate konsole ark remmina dolphin Kvantum octopkg plasma6-print-manager kwalletmanager
     
-    local theme_msg="Do you want to install the WhiteSur macOS Theme for KDE Plasma 6?\n\n(This will download the theme, icons, SDDM Login, and fully automate the Mac layout for your first login)"
+    local theme_msg="Do you want to install the WhiteSur macOS Theme for KDE Plasma 6?\n\n(This will download the theme, icons, and fully automate the Mac layout for your first login)"
     if bsddialog --title "KDE Plasma macOS Theme" --yesno "$theme_msg" 8 70; then
         macos_plasma_theme
     fi
@@ -519,12 +522,10 @@ mate_config() {
 }
 
 macos_xfce_theme() {
-    bsddialog --infobox "Downloading and building WhiteSur macOS Theme for XFCE4 & SDDM...\n(This might take a moment to fetch from GitHub)" 6 65
+    bsddialog --infobox "Downloading and building WhiteSur macOS Theme for XFCE4...\n(This might take a moment to fetch from GitHub)" 6 65
     
-    # 1. Dependencies (Only pure Qt5 components for SDDM, no KDE bloat!)
     pkg install -y bash git gtk-murrine-engine gtk-engines2 sassc glib coreutils gsed plank qt5-graphicaleffects qt5-quickcontrols2 qt5-svg qt5-imageformats
     
-    # 2. The UNIX Trick for scripts
     mkdir -p /tmp/gnu_wrap
     ln -sf /usr/local/bin/greadlink /tmp/gnu_wrap/readlink
     ln -sf /usr/local/bin/gsed /tmp/gnu_wrap/sed
@@ -537,7 +538,6 @@ macos_xfce_theme() {
     [ -d /tmp/WhiteSur-gtk-theme ] && rm -rf /tmp/WhiteSur-gtk-theme
     [ -d /tmp/WhiteSur-icon-theme ] && rm -rf /tmp/WhiteSur-icon-theme
     
-    # 3. GTK Window Theme
     git clone https://github.com/vinceliuice/WhiteSur-gtk-theme.git /tmp/WhiteSur-gtk-theme
     cd /tmp/WhiteSur-gtk-theme
     mkdir -p /usr/local/share/themes
@@ -545,7 +545,6 @@ macos_xfce_theme() {
     mkdir -p /usr/local/share/plank/themes
     cp -r src/other/plank/theme-* /usr/local/share/plank/themes/ 2>/dev/null
     
-    # 4. Icon Theme
     git clone https://github.com/vinceliuice/WhiteSur-icon-theme.git /tmp/WhiteSur-icon-theme
     cd /tmp/WhiteSur-icon-theme
     mkdir -p /usr/local/share/icons
@@ -553,19 +552,19 @@ macos_xfce_theme() {
     gtk-update-icon-cache -f -t /usr/local/share/icons/WhiteSur 2>/dev/null
     gtk-update-icon-cache -f -t /usr/local/share/icons/WhiteSur-Dark 2>/dev/null
     
-    # 5. Download Wallpaper
     mkdir -p /usr/local/share/backgrounds
     fetch -o /usr/local/share/backgrounds/WhiteSur-light.jpg https://raw.githubusercontent.com/vinceliuice/WhiteSur-wallpapers/main/4k/WhiteSur-light.jpg
     
-    # 6. SDDM Theme (Sugar-Candy for pure, lightweight QML without KDE)
-    cd /tmp
-    fetch -o sugar-candy.zip https://github.com/MarianArlt/sddm-sugar-candy/archive/refs/heads/master.zip
-    unzip -q sugar-candy.zip
-    mkdir -p /usr/local/share/sddm/themes
-    cp -r sddm-sugar-candy-master /usr/local/share/sddm/themes/sugar-candy
-    cp /usr/local/share/backgrounds/WhiteSur-light.jpg /usr/local/share/sddm/themes/sugar-candy/Backgrounds/
-    
-    cat > /usr/local/share/sddm/themes/sugar-candy/theme.conf <<EOF
+    # DEMANDE A L'UTILISATEUR POUR SDDM
+    if bsddialog --title "Login Screen (SDDM)" --yesno "Do you want to install the macOS style Login Screen (Sugar-Candy)?\n\nSelect 'No' if you want to keep the NASA theme or the default screen." 10 70; then
+        cd /tmp
+        fetch -o sugar-candy.zip https://github.com/MarianArlt/sddm-sugar-candy/archive/refs/heads/master.zip
+        unzip -q sugar-candy.zip
+        mkdir -p /usr/local/share/sddm/themes
+        cp -r sddm-sugar-candy-master /usr/local/share/sddm/themes/sugar-candy
+        cp /usr/local/share/backgrounds/WhiteSur-light.jpg /usr/local/share/sddm/themes/sugar-candy/Backgrounds/
+        
+        cat > /usr/local/share/sddm/themes/sugar-candy/theme.conf <<EOF
 [General]
 Background=Backgrounds/WhiteSur-light.jpg
 ScreenWidth=1920
@@ -575,15 +574,15 @@ MainColor=white
 AccentColor=#007aff
 EOF
 
-    mkdir -p /usr/local/etc/sddm.conf.d
-    echo "[Theme]" > /usr/local/etc/sddm.conf.d/theme.conf
-    echo "Current=sugar-candy" >> /usr/local/etc/sddm.conf.d/theme.conf
+        mkdir -p /usr/local/etc/sddm.conf.d
+        echo "[Theme]" > /usr/local/etc/sddm.conf.d/theme.conf
+        echo "Current=sugar-candy" >> /usr/local/etc/sddm.conf.d/theme.conf
+        rm -rf /tmp/sugar-candy.zip /tmp/sddm-sugar-candy-master
+    fi
     
-    # 7. Clean up and restore PATH
-    rm -rf /tmp/WhiteSur-gtk-theme /tmp/WhiteSur-icon-theme /tmp/gnu_wrap /tmp/sugar-candy.zip /tmp/sddm-sugar-candy-master
+    rm -rf /tmp/WhiteSur-gtk-theme /tmp/WhiteSur-icon-theme /tmp/gnu_wrap
     export PATH=$OLD_PATH
     
-    # 8. Autostart Plank Dock
     mkdir -p /usr/local/etc/xdg/autostart
     cat > /usr/local/etc/xdg/autostart/plank.desktop <<EOF
 [Desktop Entry]
@@ -597,7 +596,6 @@ Categories=Utility;
 OnlyShowIn=XFCE;
 EOF
 
-    # 9. Surgically remove the default XFCE bottom panel (Panel 2)
     if [ -f /usr/local/etc/xdg/xfce4/panel/default.xml ]; then
         sed -i '' '/<value type="int" value="2"\/>/d' /usr/local/etc/xdg/xfce4/panel/default.xml
     fi
@@ -608,7 +606,6 @@ EOF
         fi
     done
 
-    # 10. The Ultimate Magic: Auto-Apply all theme settings on first GUI login!
     cat > /usr/local/etc/xdg/autostart/whitesur-auto-apply.desktop <<'EOF'
 [Desktop Entry]
 Name=Apply WhiteSur Theme
@@ -619,7 +616,7 @@ Type=Application
 OnlyShowIn=XFCE;
 EOF
     
-    local msg="WhiteSur Theme, Plank Dock, Wallpaper & Sugar-Candy SDDM Login Screen installed!\n\nWhen you reboot, your login screen will be flawlessly macOS styled.\nWhen you log into XFCE for the first time, everything will transform automatically."
+    local msg="WhiteSur Theme, Plank Dock, and Wallpaper installed!\n\nWhen you log into XFCE for the first time, everything will transform automatically."
     bsddialog --msgbox "$msg" 16 75
 }
 
@@ -636,7 +633,7 @@ Type=Application
 DesktopNames=XFCE
 EOF
     
-    local theme_msg="Do you want to install the WhiteSur macOS Theme for XFCE4?\n\n(This will download the theme, icons, SDDM Sugar-Candy, and fully automate the Mac layout for your first login)"
+    local theme_msg="Do you want to install the WhiteSur macOS Theme for XFCE4?\n\n(This will download the theme, icons, and fully automate the Mac layout for your first login)"
     if bsddialog --title "XFCE4 macOS Theme" --yesno "$theme_msg" 8 70; then
         macos_xfce_theme
     fi
