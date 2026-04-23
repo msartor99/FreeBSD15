@@ -19,7 +19,7 @@ sh FreeBSD_15_universal_post_install.sh
 
 Enjoy!
 
-# 17 april 2026 New version
+# 23 april 2026 New version
 ________________________________________________________________________________________
 
 here is a new version : FreeBSD_15_universal_post_install.sh
