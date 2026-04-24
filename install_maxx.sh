@@ -1,7 +1,7 @@
 #!/usr/local/bin/bash
 # ==============================================================================
 # INSTALLATEUR INTERACTIF MAXX DESKTOP POUR FREEBSD 15
-# Détection Auto (Turing 595+ / Pascal 580) - Fix Linuxulator & Thunderbird
+# Détection Auto (awk) - Fallback NVIDIA - fetch natif - Fix Linuxulator
 # ==============================================================================
 
 # 0. Vérification Root
@@ -11,7 +11,9 @@ if [ "$(id -u)" -ne 0 ]; then
 fi
 
 echo "Initialisation de l'interface graphique..."
-pkg install -y bsddialog wget > /dev/null 2>&1
+# On s'assure que pkg est bien amorcé en silence
+env ASSUME_ALWAYS_YES=YES pkg bootstrap > /dev/null 2>&1
+pkg install -y bsddialog > /dev/null 2>&1
 
 # ==============================================================================
 # FONCTIONS D'INTERFACE (bsddialog)
@@ -30,8 +32,8 @@ step_done() {
 # DÉTECTION MATÉRIELLE ET SÉLECTION GRAPHIQUE
 # ==============================================================================
 
-# Détection de la carte graphique via pciconf
-VGA_INFO=$(pciconf -lv | grep -B1 -A3 -i "class=display" | grep "device     =" | cut -d"'" -f2 | head -n 1)
+# Détection de la carte graphique via pciconf (Correction du radar avec awk)
+VGA_INFO=$(pciconf -lv | awk '/class=0x030000/,/subclass/' | grep -i "device" | cut -d"'" -f2 | head -n 1)
 [ -z "$VGA_INFO" ] && VGA_INFO="Carte non identifiée"
 
 bsddialog --backtitle "$BTITLE" --title " Bienvenue " --colors --msgbox "\n\Zb\Z4Bienvenue dans l'installeur hybride MaXX Desktop.\Zn\n\nCe script va configurer FreeBSD, la cage Linuxulator, et installer l'environnement SGI IRIX étape par étape.\n\n \Zb👉 Appuyez sur [Entrée] pour démarrer l'installation.\Zn" 11 75
@@ -55,7 +57,7 @@ case $GPU_CHOICE in
         GPU_KMOD="nvidia-modeset"
         GPU_ENV="export LIBVA_DRIVER_NAME=nvidia\nexport VDPAU_DRIVER=nvidia\nexport __GLX_VENDOR_LIBRARY_NAME=nvidia"
         
-        # ANALYSEUR D'ARCHITECTURE NVIDIA (Auto-Détection 595 vs 580)
+        # ANALYSEUR D'ARCHITECTURE NVIDIA
         NV_REC="1" 
         if echo "$VGA_INFO" | grep -qiE "Quadro P|GTX 10|GTX 9|M6000|GP10|GM20|Pascal|Maxwell"; then
             NV_REC="2"
@@ -70,19 +72,30 @@ case $GPU_CHOICE in
             NV_SUGGESTION="Architecture incertaine. Veuillez sélectionner manuellement."
         fi
 
-        # SOUS-MENU SPÉCIFIQUE NVIDIA
-        NV_CHOICE=$(bsddialog --backtitle "$BTITLE" --title " Version du Pilote NVIDIA " --colors --clear --default-item "$NV_REC" --menu "\nMatériel détecté : \Zb\Z4$VGA_INFO\Zn\n\Z2$NV_SUGGESTION\Zn\n\nSélectionnez la branche du pilote :" 17 75 3 \
-            "1" "Latest / 595+ (RTX 2060, Séries 3000/4000...)" \
-            "2" "Legacy 580  (Quadro P4000, Séries GTX 1000/900)" \
-            "3" "Legacy 470  (Séries GTX 700/600)" \
+        # MENU DYNAMIQUE NVIDIA
+        NV_CHOICE=$(bsddialog --backtitle "$BTITLE" --title " Version du Pilote NVIDIA " --colors --clear --default-item "$NV_REC" --menu "\nMatériel : \Zb\Z4$VGA_INFO\Zn\n\Z2$NV_SUGGESTION\Zn\n\nSélectionnez la branche binaire :" 17 75 3 \
+            "1" "nvidia-driver     (Latest 595+)" \
+            "2" "nvidia-driver-580 (Legacy LTS Pascal)" \
+            "3" "nvidia-driver-470 (Legacy Kepler)" \
             2>&1 >/dev/tty)
 
         case $NV_CHOICE in
-            1) GPU_PKGS="nvidia-driver linux-nvidia-libs" ;;
-            2) GPU_PKGS="nvidia-driver-580 linux-nvidia-libs-580" ;;
-            3) GPU_PKGS="nvidia-driver-470 linux-nvidia-libs-470" ;;
+            1) NV_BASE="nvidia-driver"; NV_LIN="linux-nvidia-libs" ;;
+            2) NV_BASE="nvidia-driver-580"; NV_LIN="linux-nvidia-libs-580" ;;
+            3) NV_BASE="nvidia-driver-470"; NV_LIN="linux-nvidia-libs-470" ;;
             *) echo "Installation annulée."; exit 1 ;;
         esac
+
+        # VÉRIFICATION DE RÉALITÉ (Fallback anti-erreur)
+        # Si le paquet exact n'existe pas sur le dépôt actuel, on se rabat sur le standard
+        if ! pkg search -e "$NV_BASE" > /dev/null 2>&1; then
+            NV_BASE="nvidia-driver"
+        fi
+        if ! pkg search -e "$NV_LIN" > /dev/null 2>&1; then
+            NV_LIN="linux-nvidia-libs"
+        fi
+
+        GPU_PKGS="$NV_BASE $NV_LIN"
         ;;
     3)
         GPU_NAME="Intel"
@@ -119,14 +132,15 @@ mount -a > /dev/null 2>&1
 step_done "Le noyau est configuré (Module graphique : $GPU_KMOD).\nLes points de montage virtuels sont fixés."
 
 # --- ÉTAPE 3 ---
-step_start "3/8 : Téléchargement et Extraction de MaXX v2.2.0...\n\n(Cette étape télécharge l'installeur AWS et force l'extraction)"
+step_start "3/8 : Téléchargement et Extraction de MaXX v2.2.0...\n\n(Utilisation de l'outil natif fetch de FreeBSD...)"
 mkdir -p /opt/MaXX
 chmod 1777 /tmp
 chmod 666 /dev/dri/* 2>/dev/null
 
 cd /tmp
 if [ ! -f "maxx_installer.sh" ]; then
-    wget -c -q https://s3.ca-central-1.amazonaws.com/cdn.maxxinteractive.com/maxx-desktop-installer/MaXX-Desktop-LINUX-x86_64-2.2.0-Installer.sh -O maxx_installer.sh
+    # Remplacement de wget par fetch (natif FreeBSD)
+    fetch -q -o maxx_installer.sh https://s3.ca-central-1.amazonaws.com/cdn.maxxinteractive.com/maxx-desktop-installer/MaXX-Desktop-LINUX-x86_64-2.2.0-Installer.sh
     chmod +x maxx_installer.sh
 fi
 ./maxx_installer.sh --noexec --target /opt/MaXX > /dev/null 2>&1
