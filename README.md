@@ -37,3 +37,6 @@ This script installs Wayland, configures it, tests the latest version of the Nvi
 
 switch_to_wayland.sh
 
+# new script to install MaXX Destop on FreeBSD 15
+
+use install_maxx.sh
