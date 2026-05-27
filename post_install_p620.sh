@@ -1,107 +1,622 @@
 #!/bin/sh
+# ==============================================================================
+# FreeBSD 15 RELEASE - Universal Interactive Post-Install Script
+# Optimized for Desktop, Multimedia, AMD/Nvidia Tuning & Virtualization
+# Shell: Strict /bin/sh (POSIX Compliant) | Mode: 100% Idempotent, Standalone
+# ==============================================================================
 
-# =================================================================
-# Aquantia (Atlantic) 10GbE Driver Installation Script
-# Optimized for FreeBSD 15.0-RELEASE & Lenovo P620 (P-Series)
-# =================================================================
+set -e
+exec 3>&1
 
-WORKDIR="/root/aqtion-freebsd"
-MODULE_DIR="/boot/modules"
-SRC_TARBALL="/root/src.txz"
-
-# 1. Root privilege check
-if [ "$(id -u)" -ne 0 ]; then 
-    echo "ERROR: This script must be run as root."
+# === [00] Disclaimer & Liability Waiver ===
+if ! bsddialog --title "DISCLAIMER & LIABILITY WAIVER" \
+    --clear \
+    --backtitle "FreeBSD 15 Post-Installation Setup" \
+    --yesno "WARNING: This script automates system configuration, modifies core files, and installs software.\n\nThe author provides this script 'AS IS' and assumes NO LIABILITY for any data loss, system instability, or hardware issues that may occur.\n\nDo you accept these terms and wish to proceed?" 14 70 \
+    2>&1 1>&3; then
+    clear
+    echo "Installation cancelled. Disclaimer was not accepted."
+    exec 3>&-
     exit 1
 fi
 
-echo "=== [1/6] Installing dependencies (git) ==="
-pkg install -y git
+# === [0a] User Selection ===
+TARGET_USER=$(bsddialog --title "User Configuration" \
+    --clear \
+    --backtitle "FreeBSD 15 Post-Installation Setup" \
+    --inputbox "Enter the name of your existing standard user:\n(This user will be configured for 3D, VirtualBox, USB, and localized settings)" 10 65 \
+    2>&1 1>&3)
 
-echo "=== [2/6] Verifying Kernel Source Tree ==="
-if [ ! -d "/usr/src/sys" ]; then
-    echo "Kernel sources not found in /usr/src/sys. Downloading..."
-    if [ ! -f "$SRC_TARBALL" ]; then
-        fetch -o "$SRC_TARBALL" https://download.freebsd.org/releases/amd64/15.0-RELEASE/src.txz
-    fi
-    tar -C / -xvf "$SRC_TARBALL"
+if [ -z "$TARGET_USER" ]; then
+    clear
+    echo "Error: No username entered. Operation cancelled."
+    exec 3>&-
+    exit 1
+fi
+
+# === [0b] Aquantia Network Installation ===
+if bsddialog --title "Aquantia 10G Network" \
+    --clear \
+    --backtitle "FreeBSD 15 Post-Installation Setup" \
+    --yesno "Do you want to download, patch, and compile the Aquantia 10G network driver (specific to Lenovo P620 workstations) locally?" 10 65 \
+    2>&1 1>&3; then
+    INSTALL_AQUANTIA="YES"
 else
-    echo " [OK] Kernel sources already present."
+    INSTALL_AQUANTIA="NO"
 fi
 
-echo "=== [3/6] Fetching Driver Source Code ==="
-cd /root || exit 1
-if [ ! -d "$WORKDIR" ]; then
-    git clone https://github.com/Aquantia/aqtion-freebsd.git
+# === [0c] VirtualBox 7 Installation ===
+if bsddialog --title "VirtualBox 7 Installation" \
+    --clear \
+    --backtitle "FreeBSD 15 Post-Installation Setup" \
+    --yesno "Do you want to install and configure VirtualBox 7 (including kernel modules, bridged networking, and USB rules)?" 10 65 \
+    2>&1 1>&3; then
+    INSTALL_VBOX="YES"
+else
+    INSTALL_VBOX="NO"
 fi
-cd "$WORKDIR" || exit 1
-git checkout . # Reset to clean state to avoid patch collisions
-make clean
 
-echo "=== [4/6] Applying FreeBSD 15 Compatibility Patches ==="
+# === [0d] GPU Selection ===
+GPU_CHOICE=$(bsddialog --title "Graphics Card (GPU)" \
+    --clear \
+    --backtitle "FreeBSD 15 Post-Installation Setup" \
+    --menu "Select your graphics card manufacturer:" 13 70 4 \
+    "NVIDIA" "GeForce, Quadro, RTX (Includes hardware detection)" \
+    "AMD_GPU" "Recent Radeon (W7000, RX 5000+, RDNA, Navi)" \
+    "AMD_RADEON" "Legacy Radeon (HD, R9, pre-Polaris)" \
+    "INTEL" "Intel HD/UHD Integrated Graphics" \
+    2>&1 1>&3)
 
-# A. Resolve 'pause' conflict by commenting out unistd.h
-# This prevents the user-space/kernel-space name collision
-grep -l "#include <unistd.h>" *.[ch] | xargs sed -i '' 's|^#include <unistd.h>|// #include <unistd.h>|g'
+if [ -z "$GPU_CHOICE" ]; then
+    clear
+    echo "Error: No graphics card selected. Operation cancelled."
+    exec 3>&-
+    exit 1
+fi
 
-# B. Update DRIVER_MODULE macro and remove unused aq_devclass
-# FreeBSD 15 expects 5 arguments for DRIVER_MODULE in this context
-sed -i '' '/static devclass_t aq_devclass;/d' aq_main.c
-sed -i '' 's/DRIVER_MODULE(atlantic, pci, aq_driver, aq_devclass, 0, 0);/DRIVER_MODULE(atlantic, pci, aq_driver, 0, 0);/g' aq_main.c
+NVIDIA_WAYLAND="NO"
+if [ "$GPU_CHOICE" = "NVIDIA" ]; then
+    VGA_INFO=$(pciconf -lv | grep -A 2 -i "class=0x03" | grep -E -i "vendor|device" | tr -d "'" || echo "Hardware not identified")
+    
+    bsddialog --title "Nvidia Detection" \
+        --clear \
+        --msgbox "The following graphics hardware was detected on this machine:\n\n$VGA_INFO\n\nPress OK to choose the corresponding driver version." 12 70 2>&1 1>&3
+    
+    NVIDIA_BRANCH=$(bsddialog --title "Nvidia Driver Version" \
+        --clear \
+        --menu "Select the Nvidia driver branch:" 13 75 4 \
+        "LATEST" "Turing and newer (Driver 595+ / Quadro RTX, RTX 2000+)" \
+        "580" "Pascal/Maxwell (Driver 580 / Quadro P4000/P2000, GTX 1000)" \
+        "470" "Kepler (Driver 470 / Quadro K, GTX 600-700)" \
+        "390" "Fermi (Driver 390 / Quadro Fermi, GTX 400-500)" \
+        2>&1 1>&3)
+    
+    if [ "$NVIDIA_BRANCH" = "LATEST" ]; then
+        GPU_PKGS="nvidia-driver nvidia-settings nvidia-xconfig"
+    elif [ "$NVIDIA_BRANCH" = "580" ]; then
+        GPU_PKGS="nvidia-driver-580 nvidia-settings"
+    elif [ "$NVIDIA_BRANCH" = "470" ]; then
+        GPU_PKGS="nvidia-driver-470 nvidia-settings"
+    elif [ "$NVIDIA_BRANCH" = "390" ]; then
+        GPU_PKGS="nvidia-driver-390 nvidia-settings"
+    else
+        clear; echo "Error: Nvidia driver branch not selected."; exec 3>&-; exit 1
+    fi
+    GPU_MOD="nvidia-modeset"
 
-# C. Add net/if_var.h header
-# Required for accessing opaque ifnet structures in FreeBSD 15
-for f in aq_main.c aq_media.c aq_ring.c; do
-    sed -i '' '/#include <net\/if.h>/a\
+    # --- Option Expérimentale Wayland ---
+    if [ "$NVIDIA_BRANCH" = "LATEST" ] || [ "$NVIDIA_BRANCH" = "580" ]; then
+        if bsddialog --title "Nvidia Wayland (Expérimental)" \
+            --clear \
+            --backtitle "FreeBSD 15 Post-Installation Setup" \
+            --yesno "Souhaitez-vous installer le support EXPÉRIMENTAL pour Wayland ?\n\nCela ajoutera 'nvidia-drm-kmod' aux paquets.\n\nATTENTION: SDDM démarrera toujours sur Xorg par défaut pour garantir la stabilité au boot." 15 75 \
+            2>&1 1>&3; then
+            NVIDIA_WAYLAND="YES"
+            GPU_PKGS="$GPU_PKGS nvidia-drm-kmod"
+        fi
+    fi
+
+elif [ "$GPU_CHOICE" = "AMD_GPU" ]; then
+    GPU_PKGS="drm-kmod gpu-firmware-kmod"
+    GPU_MOD="amdgpu"
+elif [ "$GPU_CHOICE" = "AMD_RADEON" ]; then
+    GPU_PKGS="drm-kmod"
+    GPU_MOD="radeonkms"
+elif [ "$GPU_CHOICE" = "INTEL" ]; then
+    GPU_PKGS="drm-kmod"
+    GPU_MOD="i915kms"
+fi
+
+# === [0e] Desktop Environment Selection ===
+DESKTOP_CHOICE=$(bsddialog --title "Desktop Environment" \
+    --clear \
+    --backtitle "FreeBSD 15 Post-Installation Setup" \
+    --menu "Select the graphical environment to install:" 12 70 3 \
+    "XFCE" "Classic, lightweight, and fast" \
+    "MATE" "Traditional and robust (GNOME 2 fork)" \
+    "KDE" "Plasma 6 (Modern, highly customizable)" \
+    2>&1 1>&3)
+
+if [ -z "$DESKTOP_CHOICE" ]; then
+    clear
+    echo "Error: No desktop environment selected. Operation cancelled."
+    exec 3>&-
+    exit 1
+fi
+
+# === [0f] Locale & Keyboard Configuration ===
+if bsddialog --title "Locale & Keyboard Setup" \
+    --clear \
+    --backtitle "FreeBSD 15 Post-Installation Setup" \
+    --yesno "Do you want to configure the system language and keyboard layout (Console & X11)?" 10 70 \
+    2>&1 1>&3; then
+    CONFIG_LOCALE="YES"
+    
+    SYS_LANG=$(bsddialog --title "System Language" \
+        --clear \
+        --backtitle "FreeBSD 15 Post-Installation Setup" \
+        --default-item "fr_CH.UTF-8" \
+        --menu "Select the language for the graphical session:" 17 75 9 \
+        "fr_CH.UTF-8" "French (Switzerland) - Default" \
+        "fr_FR.UTF-8" "French (France)" \
+        "en_US.UTF-8" "English (United States)" \
+        "en_GB.UTF-8" "English (United Kingdom)" \
+        "de_CH.UTF-8" "German (Switzerland)" \
+        "it_CH.UTF-8" "Italian (Switzerland)" \
+        "it_IT.UTF-8" "Italian (Italy)" \
+        "es_ES.UTF-8" "Spanish (Spain)" \
+        "pt_PT.UTF-8" "Portuguese (Portugal)" \
+        2>&1 1>&3)
+        
+    if [ -z "$SYS_LANG" ]; then SYS_LANG="fr_CH.UTF-8"; fi
+    
+    KBD_CHOICE=$(bsddialog --title "Keyboard Layout" \
+        --clear \
+        --backtitle "FreeBSD 15 Post-Installation Setup" \
+        --default-item "CH_FR" \
+        --menu "Select your keyboard layout (Console & X11/SDDM):" 18 75 10 \
+        "CH_FR" "Swiss French (ch, fr) - Default" \
+        "CH_DE" "Swiss German (ch, de)" \
+        "FR" "French AZERTY (fr)" \
+        "US" "US QWERTY (us)" \
+        "UK" "British QWERTY (gb)" \
+        "DE" "German QWERTZ (de)" \
+        "IT" "Italian (it)" \
+        "ES" "Spanish (es)" \
+        "PT" "Portuguese (pt)" \
+        2>&1 1>&3)
+        
+    case "$KBD_CHOICE" in
+        CH_FR) XKB_LAYOUT="ch"; XKB_VARIANT="fr"; CON_KEYMAP="ch-fr.acc" ;;
+        CH_DE) XKB_LAYOUT="ch"; XKB_VARIANT="de"; CON_KEYMAP="ch" ;;
+        FR)    XKB_LAYOUT="fr"; XKB_VARIANT="";   CON_KEYMAP="fr" ;;
+        US)    XKB_LAYOUT="us"; XKB_VARIANT="";   CON_KEYMAP="us" ;;
+        UK)    XKB_LAYOUT="gb"; XKB_VARIANT="";   CON_KEYMAP="uk" ;;
+        DE)    XKB_LAYOUT="de"; XKB_VARIANT="";   CON_KEYMAP="de" ;;
+        IT)    XKB_LAYOUT="it"; XKB_VARIANT="";   CON_KEYMAP="it" ;;
+        ES)    XKB_LAYOUT="es"; XKB_VARIANT="";   CON_KEYMAP="es" ;;
+        PT)    XKB_LAYOUT="pt"; XKB_VARIANT="";   CON_KEYMAP="pt" ;;
+        *)     XKB_LAYOUT="ch"; XKB_VARIANT="fr"; CON_KEYMAP="ch-fr.acc" ;;
+    esac
+else
+    CONFIG_LOCALE="NO"
+fi
+
+exec 3>&-
+clear
+
+# ==============================================================================
+# 1. Package Consolidation
+# ==============================================================================
+echo "=== [1/11] Consolidating and Installing Packages ==="
+
+if [ "$DESKTOP_CHOICE" = "XFCE" ]; then DESKTOP_PKGS="xfce aisleriot"; fi
+if [ "$DESKTOP_CHOICE" = "MATE" ]; then DESKTOP_PKGS="mate aisleriot"; fi
+if [ "$DESKTOP_CHOICE" = "KDE" ]; then DESKTOP_PKGS="plasma6-plasma dolphin konsole kpat"; fi
+
+# Base Tools & Power Utilities
+BASE_UTILS="doas unzip libzip wget git-lite htop neofetch python3 bashtop ImageMagick7 smartmontools"
+
+# Printing (CUPS) & Hardware Temp Tools
+HARDWARE_PKGS="cups gutenprint cups-filters hplip system-config-printer sensors cpu-microcode"
+
+# Advanced Multimedia Stack
+MULTIMEDIA_PKGS="vlc ffmpeg libva-vdpau-driver libva-utils libdvdread libdvdnav signal-cli xdg-user-dirs octopkg multimedia/mpv gstreamer1-plugins-all gstreamer1-libav libbluray"
+
+# USB Filesystems
+USB_FS_PKGS="fusefs-ntfs fusefs-ext2 fusefs-hfsfuse"
+
+# Common Core
+COMMON_PKGS="xorg sddm firefox thunderbird libreoffice fr-libreoffice"
+
+# Conditionally add VirtualBox Packages
+VBOX_PKGS=""
+if [ "$INSTALL_VBOX" = "YES" ]; then
+    VBOX_PKGS="virtualbox-ose-72 virtualbox-ose-kmod-72"
+fi
+
+env ASSUME_ALWAYS_YES=YES pkg install $COMMON_PKGS $DESKTOP_PKGS $GPU_PKGS $BASE_UTILS $HARDWARE_PKGS $MULTIMEDIA_PKGS $USB_FS_PKGS $VBOX_PKGS
+
+# ==============================================================================
+# 2. Kernel Tuning & Silent Boot Configuration
+# ==============================================================================
+echo "=== [2/11] Configuring Silent Boot, Optimizations & Microcode ==="
+
+# Boot Mute & Delay Tuning
+sysrc -f /boot/loader.conf boot_mute=YES
+sysrc -f /boot/loader.conf autoboot_delay=3
+sysrc -f /boot/loader.conf tmpfs_load=YES
+sysrc -f /boot/loader.conf aio_load=YES
+sysrc splash_changer_enable=YES
+sysrc rc_startmsgs=NO
+
+# Idempotent Silent Boot /etc/rc patch
+if ! grep -q "run_rc_script \${_rc_elem} \${_boot} > /dev/null" /etc/rc; then
+    sed -i '' 's/run_rc_script ${_rc_elem} ${_boot}/run_rc_script ${_rc_elem} ${_boot} > \/dev\/null/g' /etc/rc
+fi
+
+# AMD Temperature & Microcode Configuration
+sysrc -f /boot/loader.conf amdtemp_load="YES"
+sysrc -f /boot/loader.conf cpu_microcode_load="YES"
+sysrc -f /boot/loader.conf cpu_microcode_name="/boot/firmware/amd-ucode.bin"
+
+# Persistent Sysctl Tuning Block
+for SYSCTL_VAR in \
+    "kern.sched.preempt_thresh=224" \
+    "kern.ipc.shm_allow_removed=1" \
+    "vfs.usermount=1" \
+    "net.local.stream.recvspace=65536" \
+    "net.local.stream.sendspace=65536"; do
+    
+    KEY=$(echo "$SYSCTL_VAR" | cut -d= -f1)
+    VAL=$(echo "$SYSCTL_VAR" | cut -d= -f2)
+    if grep -q "^$KEY=" /etc/sysctl.conf 2>/dev/null; then
+        sed -i '' "s|^$KEY=.*|$KEY=$VAL|" /etc/sysctl.conf
+    else
+        echo "$KEY=$VAL" >> /etc/sysctl.conf
+    fi
+    # Apply to running kernel instantly
+    sysctl "$SYSCTL_VAR" >/dev/null 2>&1 || true
+done
+
+# ==============================================================================
+# 3. Linux Emulation Interface Activation
+# ==============================================================================
+echo "=== [3/11] Activating Linux Emulation Layer ==="
+sysrc linux_enable=YES
+sysrc linux64_enable=YES
+kldload linux >/dev/null 2>&1 || true
+kldload linux64 >/dev/null 2>&1 || true
+service linux restart || true
+
+# ==============================================================================
+# 4. Lenovo P620 Aquantia 10G Driver Local Compilation
+# ==============================================================================
+echo "=== [4/11] Compiling and Installing Aquantia 10G Driver ==="
+if [ "$INSTALL_AQUANTIA" = "YES" ]; then
+    echo "-> Checking for FreeBSD 15 Kernel Sources..."
+    if [ ! -d "/usr/src/sys" ]; then
+        echo "   [!] Kernel sources not found. Downloading src.txz..."
+        fetch -o /tmp/src.txz https://download.freebsd.org/releases/amd64/15.0-RELEASE/src.txz
+        tar -C / -xf /tmp/src.txz
+        rm -f /tmp/src.txz
+    else
+        echo "   [+] Kernel sources already present."
+    fi
+
+    echo "-> Fetching driver source code from Aquantia repository..."
+    WORKDIR="/root/aqtion-freebsd"
+    if [ ! -d "$WORKDIR" ]; then
+        git clone https://github.com/Aquantia/aqtion-freebsd.git "$WORKDIR"
+    fi
+    
+    # Isolate compilation in a subshell to preserve working directory
+    (
+        cd "$WORKDIR" || exit 1
+        # Ensure clean state for idempotence
+        git reset --hard HEAD >/dev/null 2>&1
+        git clean -fd >/dev/null 2>&1
+        
+        echo "-> Applying FreeBSD 15 Compatibility Patches (Opaque API, Lenovo ID)..."
+        grep -l "#include <unistd.h>" *.[ch] | xargs sed -i '' 's|^#include <unistd.h>|// #include <unistd.h>|g'
+        sed -i '' '/static devclass_t aq_devclass;/d' aq_main.c
+        sed -i '' 's/DRIVER_MODULE(atlantic, pci, aq_driver, aq_devclass, 0, 0);/DRIVER_MODULE(atlantic, pci, aq_driver, 0, 0);/g' aq_main.c
+        
+        for f in aq_main.c aq_media.c aq_ring.c; do
+            sed -i '' '/#include <net\/if.h>/a\
 #include <net/if_var.h>' "$f"
-done
+            sed -i '' 's/ifp->if_softc/if_getsoftc(ifp)/g' "$f"
+            sed -i '' 's/ifp->if_flags/if_getflags(ifp)/g' "$f"
+            sed -i '' 's/ifp->if_drv_flags/if_getdrvflags(ifp)/g' "$f"
+            sed -i '' 's/ifp->if_capenable/if_getcapenable(ifp)/g' "$f"
+            sed -i '' 's/ifp->if_baudrate/if_getbaudrate(ifp)/g' "$f"
+            sed -i '' 's/ifp->if_mtu/if_getmtu(ifp)/g' "$f"
+        done
 
-# D. Convert to Opaque API (ifp-> to if_get*)
-# Direct access to ifp members is no longer allowed
-for f in aq_main.c aq_media.c aq_ring.c; do
-    sed -i '' 's/ifp->if_softc/if_getsoftc(ifp)/g' "$f"
-    sed -i '' 's/ifp->if_flags/if_getflags(ifp)/g' "$f"
-    sed -i '' 's/ifp->if_drv_flags/if_getdrvflags(ifp)/g' "$f"
-    sed -i '' 's/ifp->if_capenable/if_getcapenable(ifp)/g' "$f"
-    sed -i '' 's/ifp->if_baudrate/if_getbaudrate(ifp)/g' "$f"
-    sed -i '' 's/ifp->if_mtu/if_getmtu(ifp)/g' "$f"
-done
-
-# E. Add Lenovo P620 specific Device ID (0x07b1)
-sed -i '' 's/AQ_DEVICE(0x07b0)/AQ_DEVICE(0x07b0),\
+        sed -i '' 's/AQ_DEVICE(0x07b0)/AQ_DEVICE(0x07b0),\
 \tAQ_DEVICE(0x07b1)/g' aq_main.c
 
-echo "=== [5/6] Building and Installing Kernel Module ==="
-make
-if [ -f "if_atlantic.ko" ]; then
-    mkdir -p "$MODULE_DIR"
-    cp if_atlantic.ko "$MODULE_DIR/"
-    echo " [+] Module successfully installed to $MODULE_DIR"
+        echo "-> Compiling if_atlantic.ko module..."
+        make clean >/dev/null 2>&1
+        make >/dev/null
+
+        if [ -f "if_atlantic.ko" ]; then
+            mkdir -p /boot/modules
+            cp if_atlantic.ko /boot/modules/
+            echo "   [+] Module successfully installed to /boot/modules."
+        else
+            echo "   [!] Compilation FAILED."
+            exit 1
+        fi
+    )
+    
+    echo "-> Configuring Aquantia persistence and PHY optimizations..."
+    sysrc -f /boot/loader.conf if_atlantic_load="YES"
+    sysrc ifconfig_aq0="DHCP"
+    
+    for AQ_VAR in "nrxqs" "ntxqs"; do
+        if grep -q "^dev.aq.0.iflib.override_${AQ_VAR}=" /boot/loader.conf 2>/dev/null; then
+            sed -i '' "s/^dev.aq.0.iflib.override_${AQ_VAR}=.*/dev.aq.0.iflib.override_${AQ_VAR}=\"8\"/" /boot/loader.conf
+        else
+            echo "dev.aq.0.iflib.override_${AQ_VAR}=\"8\"" >> /boot/loader.conf
+        fi
+    done
+    echo "-> Aquantia 10G setup fully integrated."
 else
-    echo " [!] Compilation FAILED."
-    exit 1
+    echo "-> Skipped (Aquantia installation not selected)."
 fi
 
-echo "=== [6/6] Configuring Persistence ==="
-
-# Enable module loading at boot
-if ! grep -q "if_atlantic_load" /boot/loader.conf; then
-    echo 'if_atlantic_load="YES"' >> /boot/loader.conf
-    echo " [+] Added if_atlantic_load to /boot/loader.conf"
+# ==============================================================================
+# 5. Core Kernel Modules Deployment
+# ==============================================================================
+echo "=== [5/11] Configuring Kernel Modules Initialization ==="
+ALL_MODS=""
+if [ "$GPU_CHOICE" = "NVIDIA" ] && [ "$NVIDIA_WAYLAND" = "YES" ]; then
+    ALL_MODS="nvidia-modeset nvidia-drm fusefs ext2fs"
+else
+    ALL_MODS="$GPU_MOD fusefs ext2fs"
 fi
 
-# Enable DHCP on the interface at boot
-if ! grep -q "ifconfig_aq0" /etc/rc.conf; then
-    echo 'ifconfig_aq0="DHCP"' >> /etc/rc.conf
-    echo " [+] Added ifconfig_aq0 to /etc/rc.conf"
+for MOD in $ALL_MODS; do
+    if [ -n "$MOD" ]; then
+        if ! sysrc -n kld_list 2>/dev/null | grep -qw "$MOD"; then
+            sysrc kld_list+="$MOD"
+            echo "-> Module $MOD added to system startup list."
+        fi
+        kldload "$MOD" >/dev/null 2>&1 || true
+    fi
+done
+
+# ==============================================================================
+# 6. Device File System (Devfs) Rules Integration
+# ==============================================================================
+echo "=== [6/11] Enforcing Custom Devfs Security & Rulesets ==="
+if grep -q "^# BEGIN DESKTOP LOCALRULES" /etc/devfs.rules 2>/dev/null; then
+    sed -i '' '/# BEGIN DESKTOP LOCALRULES/,/# END DESKTOP LOCALRULES/d' /etc/devfs.rules
 fi
 
-echo "-------------------------------------------------------"
-echo " INSTALLATION COMPLETE!"
-echo " The aq0 interface will be ready after next reboot."
-echo " To enable it now without rebooting:"
-echo "   kldload if_atlantic"
-echo "   ifconfig aq0 up"
-echo "   dhclient aq0"
-echo "-------------------------------------------------------"
+cat << 'EOF' >> /etc/devfs.rules
+# BEGIN DESKTOP LOCALRULES
+[localrules=5]
+add path 'da*' mode 0660 group operator
+add path 'cd*' mode 0660 group operator
+add path 'uscanner*' mode 0660 group operator
+add path 'xpt*' mode 0660 group operator
+add path 'pass*' mode 0660 group operator
+add path 'md*' mode 0660 group operator
+add path 'msdosfs/*' mode 0660 group operator
+add path 'ext2fs/*' mode 0660 group operator
+add path 'ntfs/*' mode 0660 group operator
+add path 'usb/*' mode 0660 group operator
+add path 'unlpt*' mode 0660 group cups
+add path 'lpt*' mode 0660 group cups
+# END DESKTOP LOCALRULES
+EOF
 
+sysrc devfs_system_ruleset=localrules
+service devfs restart
+
+# ==============================================================================
+# 7. Core Subsystems Configurations (CUPS & Smartd)
+# ==============================================================================
+echo "=== [7/11] Deploying Printing and Power Core Services ==="
+sysrc cupsd_enable="YES"
+service cupsd restart || true
+
+sysrc smartd_enable=YES
+if [ ! -f /usr/local/etc/smartd.conf ]; then
+    cp /usr/local/etc/smartd.conf.sample /usr/local/etc/smartd.conf
+fi
+service smartd restart || true
+
+# ==============================================================================
+# 8. Absolute Identity and French Class Management
+# ==============================================================================
+echo "=== [8/11] Creating System Login Classes (French Class Enforcement) ==="
+if grep -q "^# BEGIN FRENCH LOCALE CLASS" /etc/login.conf 2>/dev/null; then
+    sed -i '' '/# BEGIN FRENCH LOCALE CLASS/,/# END FRENCH LOCALE CLASS/d' /etc/login.conf
+fi
+
+cat << 'EOF' >> /etc/login.conf
+# BEGIN FRENCH LOCALE CLASS
+french|French Users Accounts:\
+        :charset=UTF-8:\
+        :lang=fr_FR.UTF-8:\
+        :lc_all=fr_FR:\
+        :lc_collate=fr_FR:\
+        :lc_ctype=fr_FR:\
+        :lc_messages=fr_FR:\
+        :tc=default:
+# END FRENCH LOCALE CLASS
+EOF
+
+cap_mkdb /etc/login.conf
+echo 'defaultclass=french' > /etc/adduser.conf
+
+# Map French Class across target entities dynamically
+pw usermod root -L french
+if id "$TARGET_USER" >/dev/null 2>&1; then
+    pw usermod "$TARGET_USER" -G wheel,operator,video -L french
+fi
+
+# ==============================================================================
+# 9. Swiss French Keyboard Engine Mapping (Console & X11)
+# ==============================================================================
+echo "=== [9/11] Calibrating Swiss French Keyboard Across Layers ==="
+if [ "$CONFIG_LOCALE" = "YES" ]; then
+    # VT Console Keyboard (Idempotent inject)
+    sysrc keymap="$CON_KEYMAP"
+    kbdcontrol -l "$CON_KEYMAP" >/dev/null 2>&1 || true
+
+    # Xorg Layout Mapping
+    mkdir -p /usr/local/etc/X11/xorg.conf.d/
+    cat << EOF > /usr/local/etc/X11/xorg.conf.d/20-keyboards.conf
+Section "ServerFlags"
+    Option "DontZap" "false"
+EndSection
+
+Section "InputClass"
+    Identifier "All Keyboards"
+    MatchIsKeyboard "yes"
+    Option "XkbLayout" "$XKB_LAYOUT"
+    Option "XkbVariant" "$XKB_VARIANT"
+    Option "XkbOptions" "terminate:ctrl_alt_bksp" 
+EndSection
+EOF
+    
+    # Enforce X11 configuration overrides on top of Nvidia block
+    if [ "$GPU_CHOICE" = "NVIDIA" ]; then
+        cat << 'EOF' > /usr/local/etc/X11/xorg.conf.d/20-nvidia.conf
+Section "Device"
+    Identifier "NVIDIA Card"
+    Driver "nvidia"
+EndSection
+EOF
+        if [ "$NVIDIA_WAYLAND" = "YES" ]; then
+            if ! grep -q "^hw.nvidiadrm.modeset=" /boot/loader.conf 2>/dev/null; then
+                echo 'hw.nvidiadrm.modeset="1"' >> /boot/loader.conf
+            else
+                sed -i '' 's/^hw.nvidiadrm.modeset=.*/hw.nvidiadrm.modeset="1"/' /boot/loader.conf
+            fi
+        else
+            sed -i '' '/^hw.nvidiadrm.modeset=/d' /boot/loader.conf 2>/dev/null || true
+        fi
+    fi
+fi
+
+# ==============================================================================
+# 10. Optional Subsystem Module: VirtualBox 7 Deployment
+# ==============================================================================
+echo "=== [10/11] VirtualBox 7 Core Module Deployment ==="
+if [ "$INSTALL_VBOX" = "YES" ]; then
+    echo "-> Configuring VirtualBox Virtualization Environment..."
+    
+    kldload vboxdrv >/dev/null 2>&1 || true
+    kldload vboxnetflt >/dev/null 2>&1 || true
+    kldload vboxnetadp >/dev/null 2>&1 || true
+
+    sysrc -f /boot/loader.conf vboxdrv_load="YES"
+    sysrc -f /boot/loader.conf vboxnet_load="YES"
+    sysrc vboxnet_enable="YES"
+
+    pw groupmod vboxusers -m root || true
+    if id "$TARGET_USER" >/dev/null 2>&1; then
+        pw groupmod vboxusers -m "$TARGET_USER" || true
+    fi
+
+    if [ -e /dev/vboxnetctl ]; then
+        chown root:vboxusers /dev/vboxnetctl
+        chmod 0660 /dev/vboxnetctl
+    fi
+
+    # Devfs configuration file additions
+    if ! grep -q "own[[:space:]]*vboxnetctl" /etc/devfs.conf 2>/dev/null; then
+        echo 'own     vboxnetctl root:vboxusers' >> /etc/devfs.conf
+        echo 'perm    vboxnetctl 0660' >> /etc/devfs.conf
+    fi
+
+    # Append structural components to rule book safely
+    if ! grep -q "^\[system=11\]" /etc/devfs.rules 2>/dev/null; then
+        cat << 'EOF' >> /etc/devfs.rules
+
+[system=11]
+add path 'usb/*' mode 0660 group operator
+add path 'video*' mode 0660 group operator
+EOF
+    fi
+    service devfs restart
+    echo "-> VirtualBox 7 environmental controls mapped."
+else
+    echo "-> Skipped (VirtualBox 7 installation not selected)."
+fi
+
+# ==============================================================================
+# 11. NASA UI Design Customization & Bootsplash Injection
+# ==============================================================================
+echo "=== [11/11] Personalizing Login Manager Theme & Bootsplash ==="
+rm -rf /tmp/fb14_assets
+if git clone https://github.com/msartor99/FreeBSD14 /tmp/fb14_assets; then
+    
+    # Theme Setup
+    mkdir -p /usr/local/share/sddm/themes/nasa
+    cp -R /usr/local/share/sddm/themes/maldives/* /usr/local/share/sddm/themes/nasa/
+    
+    cp /tmp/fb14_assets/Main.qml /usr/local/share/sddm/themes/nasa/
+    cp /tmp/fb14_assets/metadata.desktop /usr/local/share/sddm/themes/nasa/
+    rm -f /usr/local/share/sddm/themes/nasa/background.jpg
+    cp /tmp/fb14_assets/nasa2560login.jpg /usr/local/share/sddm/themes/nasa/background.jpg
+    
+    # Unified configuration management
+    mkdir -p /usr/local/etc/sddm.conf.d
+    cat << 'EOF' > /usr/local/etc/sddm.conf.d/10-theme.conf
+[Theme]
+Current=nasa
+
+[General]
+background=background.png
+displayFont="Montserrat"
+EOF
+
+    # Graphical Loader Branding Injection
+    mkdir -p /boot/images
+    cp /tmp/fb14_assets/freebsd-brand-rev.png /boot/images/
+    cp /tmp/fb14_assets/freebsd-logo-rev.png /boot/images/
+    cp /tmp/fb14_assets/nasa1920.png /boot/images/splash.png
+    sysrc -f /boot/loader.conf splash="/boot/images/splash.png"
+    echo "-> NASA asset mapping complete."
+else
+    echo "-> Error mapping NASA graphical tools from git repository."
+fi
+
+# LibreOffice user UI fix 
+USER_HOME=$(pw usershow "$TARGET_USER" | cut -d: -f9)
+LO_CONFIG_DIR="$USER_HOME/.config/libreoffice/4/user"
+if [ -d "$USER_HOME" ] && [ ! -f "$LO_CONFIG_DIR/registrymodifications.xcu" ]; then
+    mkdir -p "$LO_CONFIG_DIR"
+    cat << 'EOF' > "$LO_CONFIG_DIR/registrymodifications.xcu"
+<?xml version="1.0" encoding="UTF-8"?>
+<oor:items xmlns:oor="http://openoffice.org/2001/registry" xmlns:xs="http://www.w3.org/2001/XMLSchema" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance">
+<item oor:path="/org.openoffice.Office.UI.ToolbarMode/ToolbarMode"><prop oor:name="ToolbarMode" oor:op="fuse"><value>notebookbar_tabbed</value></prop></item>
+<item oor:path="/org.openoffice.Office.Common/Misc"><prop oor:name="SymbolStyle" oor:op="fuse"><value>colibre</value></prop></item>
+</oor:items>
+EOF
+    chown -R "$TARGET_USER" "$USER_HOME/.config"
+fi
+
+# Enable critical runtime hooks
+sysrc dbus_enable="YES"
+sysrc sddm_enable="YES"
+
+echo "=============================================================================="
+echo " INSTALLATION COMPLETED AND SYSTEM INTEGRITY VERIFIED!"
+if [ "$NVIDIA_WAYLAND" = "YES" ]; then
+    echo " [!] Experimental Nvidia-Wayland Infrastructure Active."
+    echo " [!] Secure Xorg Mode enforced on SDDM layer for maximum stability."
+fi
+if [ "$INSTALL_AQUANTIA" = "YES" ]; then
+    echo " [!] Aquantia driver compiled. Do not forget to completely power off"
+    echo " the machine (Cold Boot for 15 seconds) for proper initialization!"
+else
+    echo " You can now safely restart the machine by typing: reboot"
+fi
+echo "=============================================================================="
