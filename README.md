@@ -21,9 +21,15 @@ Enjoy!
 
 # 8 june 2026 New version
 
-post_install_lates.sh
+Complete overhaul of the post-installation script; the new script is post_install_latest.sh
 
-Complete overhaul of the post-installation script; the new script is poste_install_latest.sh
+fetch https://raw.githubusercontent.com/msartor99/FreeBSD15/7cbe8ebefab0945ccbd1b3e6f985e92a7e2c1c60/post_install_latest.sh -o post_install_latest.sh
+
+chmod +x post_install_latest.sh
+
+./post_install_latest.sh
+
+
 
 
 
