@@ -19,6 +19,14 @@ sh FreeBSD_15_universal_post_install.sh
 
 Enjoy!
 
+# 8 june 2026 New version
+
+post_install_lates.sh
+
+Complete overhaul of the post-installation script; the new script is poste_install_latest.sh
+
+
+
 # 23 april 2026 New version
 ________________________________________________________________________________________
 
