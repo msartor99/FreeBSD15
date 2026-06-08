@@ -23,7 +23,7 @@ Enjoy!
 
 Complete overhaul of the post-installation script; the new script is post_install_latest.sh
 
-fetch https://raw.githubusercontent.com/msartor99/FreeBSD15/7cbe8ebefab0945ccbd1b3e6f985e92a7e2c1c60/post_install_latest.sh -o post_install_latest.sh
+fetch https://raw.githubusercontent.com/msartor99/FreeBSD15/7cbe8ebefab0945ccbd1b3e6f985e92a7e2c1c60/post_install_latest.sh
 
 chmod +x post_install_latest.sh
 
