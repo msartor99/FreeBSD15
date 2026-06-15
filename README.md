@@ -21,7 +21,7 @@ Enjoy!
 
 # 15 june 2026 New version
 
-new version unversal instalaltion for FreeBSD 14/15 multiples selections
+new version unversal installation for FreeBSD 14/15 multiples selections
 
 fetch https://raw.githubusercontent.com/msartor99/FreeBSD15/refs/heads/main/FreeBSD_15_universal_post_install.sh
 
