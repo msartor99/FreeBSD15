@@ -13,11 +13,21 @@ Launch PuTTY to connect to an SSH session over the network as root or your user 
 
 type:
 
+fetch https://raw.githubusercontent.com/msartor99/FreeBSD15/refs/heads/main/install_universal.sh
+
+sh install_universal.sh
+
+Enjoy!
+
+# 15 june 2026 New version
+
+new version unversal instalaltion for FreeBSD 14/15 multiples selections
+
 fetch https://raw.githubusercontent.com/msartor99/FreeBSD15/refs/heads/main/FreeBSD_15_universal_post_install.sh
 
 sh FreeBSD_15_universal_post_install.sh
 
-Enjoy!
+
 
 # 8 june 2026 New version
 
