@@ -344,7 +344,8 @@ EOF
 
 apps_config() {
     # Modification ici : Remplacement de firefox par firefox-esr
-    pkg install -y firefox-esr chromium thunderbird vlc ffmpeg kdenlive webcamd win98se-icon-theme ImageMagick7
+    pkg install -y firefox
+    pkg install -y chromium thunderbird vlc ffmpeg kdenlive webcamd win98se-icon-theme ImageMagick7
     pkg install -y cantarell-fonts droid-fonts-ttf inconsolata-ttf noto-basic noto-emoji roboto-fonts-ttf ubuntu-font webfonts terminus-font terminus-ttf
     sysrc webcamd_enable=YES
 }
