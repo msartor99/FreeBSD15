@@ -21,7 +21,7 @@ Enjoy!
 
 # 20 june 2026 New version for FreeBSD 15.1
 
-fetch https://raw.githubusercontent.com/msartor99/FreeBSD15/refs/heads/main/FreeBSD_15_1_universal_post_install.sh
+fetch https://raw.githubusercontent.com/msartor99/FreeBSD15/refs/heads/main/FreeBSD_15.1_universal_post_install.sh
 
 # 15 june 2026 New version
 
