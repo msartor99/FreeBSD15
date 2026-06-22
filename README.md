@@ -19,6 +19,10 @@ sh install_universal.sh
 
 Enjoy!
 
+# 20 june 2026 New version for FreeBSD 15.1
+
+fetch https://raw.githubusercontent.com/msartor99/FreeBSD15/refs/heads/main/FreeBSD_15_1_universal_post_install.sh
+
 # 15 june 2026 New version
 
 new version unversal installation for FreeBSD 14/15 multiples selections
