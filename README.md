@@ -21,7 +21,7 @@ Enjoy!
 
 
 
-# 29 june 2026, newe little utility to delete / create ZFS pool
+# 29 june 2026, new little utility to delete / create ZFS pool
 
 zfs-setup.sh
 
