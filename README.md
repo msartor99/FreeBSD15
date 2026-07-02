@@ -19,9 +19,11 @@ sh install_universal.sh
 
 Enjoy!
 
+
+
 # 29 june 2026, newe little utility to delete / create ZFS pool
 
-zfs-config.sh
+zfs-setup.sh
 
 # 20 june 2026 New version for FreeBSD 15.1
 
