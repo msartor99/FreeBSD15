@@ -62,12 +62,25 @@ sysrc -f /boot/loader.conf snd_hda_load="YES"
 # 3. Optimisations du noyau et du système (sysctl.conf)
 # ============================================================
 echo "-> Application des optimisations Desktop dans sysctl.conf..."
-sysrc -f /etc/sysctl.conf kern.sched.preempt_thresh="224"
-sysrc -f /etc/sysctl.conf kern.ipc.shm_allow_removed="1"
-sysrc -f /etc/sysctl.conf net.local.stream.recvspace="65536"
-sysrc -f /etc/sysctl.conf net.local.stream.sendspace="65536"
-sysrc -f /etc/sysctl.conf vfs.usermount="1"
-sysrc -f /etc/sysctl.conf hw.snd.default_unit="1"
+
+# Boucle pour insérer ou mettre à jour les paramètres sans créer de doublons
+for param in \
+    "kern.sched.preempt_thresh=224" \
+    "kern.ipc.shm_allow_removed=1" \
+    "net.local.stream.recvspace=65536" \
+    "net.local.stream.sendspace=65536" \
+    "vfs.usermount=1" \
+    "hw.snd.default_unit=1"
+do
+    key=$(echo "$param" | cut -d= -f1)
+    if grep -q "^${key}=" /etc/sysctl.conf; then
+        # Remplace la ligne existante si elle est déjà là
+        sed -i '' "s/^${key}=.*/${param}/" /etc/sysctl.conf
+    else
+        # Ajoute la ligne si elle n'existe pas
+        echo "${param}" >> /etc/sysctl.conf
+    fi
+done
 
 # ============================================================
 # 4. Activation des services (rc.conf)
