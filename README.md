@@ -22,7 +22,7 @@ Enjoy!
 
 # 8 july 2026, simple MATE desktop post installation
 
-mate-post-install.sh
+fetch https://raw.githubusercontent.com/msartor99/FreeBSD15/refs/heads/main/mate-post-install.sh
 
 # 29 june 2026, new little utility to delete / create ZFS pool
 
