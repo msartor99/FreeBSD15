@@ -20,7 +20,7 @@ sh install_universal.sh
 Enjoy!
 
 
-8 july 2026, simple MATE desktop post installation
+# 8 july 2026, simple MATE desktop post installation
 
 mate-post-install.sh
 
