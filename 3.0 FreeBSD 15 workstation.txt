@@ -213,6 +213,14 @@ EOF
 pciconf -lv | grep -B4 "VGA"
 
 
+####################################################
+# install Intel driver
+#
+####################################################
+
+pkg install drm-kmod gpu-firmware-intel-kmod
+sysrc kld_list+="i915kms"
+
 
 ####################################################
 # install Nvidia driver
