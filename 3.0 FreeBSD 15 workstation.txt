@@ -1,0 +1,604 @@
+# installation  freebsd 15 + wayland + plasma6
+# version 3.0 13.7.2026
+# boot usb et install : keyboard sf, network ip fixe, user administrateur,password
+
+
+
+####################################################
+#  install sudo access
+#
+####################################################
+
+pkg update -y
+pkg install -y sudo
+
+
+####################################################
+# use visudo to change %wheel ALL=(ALL:ALL ) ALL 
+# echo to sudo file don't work
+####################################################
+
+visudo
+
+
+####################################################
+#                  BASE CONFIG
+#  
+####################################################
+
+echo "PermitRootLogin yes" >> /etc/ssh/sshd_config
+sh /etc/rc.d/sshd restart
+
+freebsd-update fetch install
+# need reboot
+
+####################################################
+# some config and silent boot (some times...)
+####################################################
+
+sysrc -f /boot/loader.conf boot_mute=YES
+sysrc splash_changer_enable=YES
+
+sed -i '' 's/run_rc_script ${_rc_elem} ${_boot}/run_rc_script ${_rc_elem} ${_boot} > \/dev\/null/g' /etc/rc
+sysrc rc_startmsgs=NO
+
+sysrc -f /boot/loader.conf autoboot_delay=3
+
+echo  'efi_max_resolution="1080p"' >> /boot/loader.conf 
+echo  'kern.vt.fb.default_mode="1920x1080"' >> /boot/loader.conf 
+
+sysrc -f /boot/loader.conf kern.vt.fb.default_mode="1920x1080"
+
+echo "kern.sched.preempt_thresh=224 " >>/etc/sysctl.conf
+echo "kern.ipc.shm_allow_removed=1" >>/etc/sysctl.conf
+
+sysrc -f /boot/loader.conf tmpfs_load=YES
+
+sysrc -f /boot/loader.conf aio_load=YES
+
+sysctl net.local.stream.recvspace=65536
+sysctl net.local.stream.sendspace=65536
+
+
+
+####################################################
+# some tips to manage temp on board
+# 
+####################################################
+
+####################################################
+# for Intel CPU
+pkg install -y cpu-microcode
+sysrc -f /boot/loader.conf coretemp_load="YES"
+sysrc -f /boot/loader.conf cpu_microcode_name="/boot/firmware/intel-ucode.bin"
+pkg install -y sensors
+
+
+####################################################
+# need enable Linux for Nvidia driver and lot of other things
+#
+####################################################
+
+sysrc linux_enable=YES
+sysrc linux64_enable=YES
+kldload linux
+kldload linux64
+service linux start
+sysrc linux_mounts_enable="YES"
+
+
+
+####################################################
+# configuration base and 
+# install htop and utilities
+####################################################
+
+pkg install -y doas unzip libzip wget git 
+pkg install -y htop neofetch python3 bashtop
+pkg install -y ImageMagick7
+
+# configuration powermanagement
+
+pkg install -y smartmontools
+sysrc smartd_enable=YES
+cp /usr/local/etc/smartd.conf.sample /usr/local/etc/smartd.conf
+service smartd start
+
+
+####################################################
+# install french class 
+#   do not use cat
+####################################################
+
+
+echo "  ">> /etc/login.conf
+echo 'french|French Users Accounts:\' >> /etc/login.conf
+echo '     :charset=UTF-8:\' >> /etc/login.conf
+echo '     :lang=fr_FR.UTF-8:\' >> /etc/login.conf
+echo '      lc_all=fr_FR:\' >> /etc/login.conf
+echo '      lc_collate=fr_FR:\' >> /etc/login.conf
+echo '      lc_ctype=fr_FR:\' >> /etc/login.conf
+echo '      lc_messages=fr_FR:\' >> /etc/login.conf
+echo '     :tc=default:' >> /etc/login.conf
+echo '   ' >> /etc/login.conf
+
+cap_mkdb /etc/login.conf
+echo 'defaultclass=french' > /etc/adduser.conf
+
+pw usermod administrateur -G wheel,operator,video -L french
+
+pw usermod root -L french
+
+
+
+####################################################
+# install printer manager cups and usb support
+#
+####################################################
+
+cat >>/etc/devfs.rules <<EOF
+
+[localrules=5]
+add path 'da*' mode 0660 group operator
+add path 'cd*' mode 0660 group operator
+add path 'uscanner*' mode 0660 group operator
+add path 'xpt*' mode 660 group operator
+add path 'pass*' mode 660 group operator
+add path 'md*' mode 0660 group operator
+add path 'msdosfs/*' mode 0660 group operator
+add path 'ext2fs/*' mode 0660 group operator
+add path 'ntfs/*' mode 0660 group operator
+add path 'usb/*' mode 0660 group operator
+add path 'unlpt*' mode 0660 group cups
+add path 'lpt*' mode 0660 group cups
+EOF
+
+pkg install -y cups gutenprint cups-filters hplip system-config-printer hplip
+sysrc cupsd_enable="YES"
+sysrc devfs_system_ruleset=localrules
+service devfs restart
+
+
+# install USB support
+
+pkg install -y fusefs-ntfs fusefs-ext2 fusefs-hfsfuse
+sysrc kld_list+=fusefs
+sysrc kld_list+=ext2fs
+kldload fusefs
+kldload ext2fs
+echo "vfs.usermount=1" >> /etc/sysctl.conf
+
+
+
+####################################################
+# install xorg
+#
+####################################################
+
+pkg install -y xorg dbus avahi signal-cli seatd
+sysrc dbus_enable=YES
+sysrc avahi_enable=YES
+echo  "proc       proc       procfs       rw       0       0" >>/etc/fstab
+echo  "fdesc     /dev/fd      fdescfs       rw       0       0" >>/etc/fstab
+
+# sysrc seatd_enable=YES
+
+
+# now set swiss french keyboard on X11 config
+
+cat >/usr/local/etc/X11/xorg.conf.d/20-keyboards.conf <<EOF
+
+Section "ServerFlags"
+                 Option "DontZap" "false"
+EndSection
+
+
+Section     "InputClass"
+           Identifier     "All Keyboards"
+           MatchIsKeyboard    "yes"
+           Option     "XkbLayout" "ch"
+           Option     "XkbVariant" "fr"
+           Option     "XkbOptions" "terminate:ctrl_alt_bksp" 
+
+EndSection
+
+EOF
+
+
+####################################################
+# list graphic card type 
+#
+####################################################
+
+pciconf -lv | grep -B4 "VGA"
+
+
+
+####################################################
+# install Nvidia driver
+#
+####################################################
+
+pkg install -y nvidia-driver-580 linux-nvidia-libs-580 nvidia-kmod-580 nvidia-drm-kmod-580 libc6-shim
+
+pkg install -y  nvidia-settings nvidia-xconfig
+sysrc kld_list+="nvidia-modeset"
+sysrc nvidia_modeset_enable="YES"
+
+cat >> /boot/loader.conf << EOF
+hw.nvidiadrm.modeset="1"
+hw.nvidia.registry.EnableGpuFirmware="1"
+nvidia-drm.modeset="1"
+EOF
+
+nvidia-xconfig
+
+
+####################################################
+# now install sddm, theme maldives
+# load keyboard first
+#
+####################################################
+
+pkg install -y sddm
+
+sysrc sddm_enable="YES"
+sysrc sddm_lang="ch_FR"
+cat >> /usr/local/share/sddm/scripts/Xsetup <<EOF
+setxkbmap ch fr
+EOF
+
+
+cat > /usr/local/etc/sddm.conf <<EOF
+# Disable virtual keyboard by default
+InputMethod=""
+EOF
+
+mkdir -p /usr/local/etc/sddm.conf.d
+cat > /usr/local/etc/sddm.conf.d/theme.conf <<EOF
+
+[Theme]
+# Current Theme name
+Current=maldives
+
+EOF
+
+
+
+
+####################################################
+# alternate splash  thanks to kamila.is
+#
+####################################################
+
+pkg install -y ImageMagick7
+
+cd /tmp
+wget https://kamila.is/media/v2.png
+
+#magick convert v2.png -resize 1920x1080 v2hd.png
+
+# optional
+magick convert v2.png -resize 1920x1200 v2hd.png
+
+sysrc -f /boot/loader.conf splash="/boot/images/splash.png"
+cp -r /tmp/v2hd.png  /boot/images/splash.png
+cd
+
+
+
+
+####################################################
+# install cinnamon
+####################################################
+
+pkg install -y cinnamon
+
+
+####################################################
+# install plasma6
+####################################################
+
+pkg install -y --g "plasma6-*"
+pkg install -y --g "kf6*"
+
+pkg install -y pavucontrol
+pkg install -y kate konsole ark remmina dolphin Kvantum
+
+
+####################################################
+# optional : installation Wayland and Plasma6 
+# 
+# from youtube 
+# https://www.youtube.com/watch?v=vbWOLzGDa4I
+####################################################
+
+fetch https://gitlab.com/alfix/kde-installer-dialogs/-/raw/main/desktop
+
+# run at the console
+sh desktop
+
+
+
+
+####################################################
+# install audio
+#
+####################################################
+
+pkg install -y pulseaudio pipewire wireplumber
+pkg install -y audio/freedesktop-sound-theme
+
+
+sysrc sound_load="YES"
+sysrc  snd_hda_load="YES"
+
+# for Nvidia
+sysctl hw.snd.default_unit=1
+
+
+
+
+####################################################
+# now again silent msg on boot 
+# 
+####################################################
+
+sed -i '' 's/run_rc_script ${_rc_elem} ${_boot}/run_rc_script ${_rc_elem} ${_boot} > \/dev\/null/g' /etc/rc
+
+
+####################################################
+# now install base apps
+# 
+####################################################
+
+pkg install -y firefox 
+
+pkg install -y vlc ffmpeg libva-vdpau-driver libva-utils libdvdread libdvdnav signal-cli \
+xdg-user-dirs octopkg multimedia/mpv \
+gstreamer1-plugins-all gstreamer1-libav libbluray libdvdread libdvdnav
+
+pkg install -y vlc ffmpeg libva-vdpau-driver libva-utils libdvdread libdvdnav signal-cli \
+eom remmina xdg-user-dirs octopkg firefox-esr chromium thunderbird multimedia/mpv \
+gstreamer1-plugins-all gstreamer1-libav libbluray libdvdread libdvdnav \
+
+webcamd v4l-utils kdenlive \
+cantarell-fonts droid-fonts-ttf inconsolata-ttf noto-basic noto-emoji roboto-fonts-ttf ubuntu-font \
+papirus-icon-theme qogir-icon-themes win98se-icon-theme ImageMagick7
+
+sysrc -v webcamd_enable=YES
+
+
+
+####################################################
+# now install extra fonts
+#
+####################################################
+
+pkg install -y cantarell-fonts droid-fonts-ttf inconsolata-ttf noto-basic noto-emoji roboto-fonts-ttf  ubuntu-font webfonts terminus-font terminus-ttf
+
+# Install some fonts
+pkg install -y chinese/arphicttf chinese/font-std hebrew/culmus hebrew/elmar-fonts japanese/font-ipa japanese/font-ipa-uigothic japanese/font-ipaex japanese/font-kochi japanese/font-migmix japanese/font-migu japanese/font-mona-ipa japanese/font-motoya-al japanese/font-mplus-ipa japanese/font-sazanami japanese/font-shinonome japanese/font-takao japanese/font-ume japanese/font-vlgothic x11-fonts/hanazono-fonts-ttf japanese/font-mikachan korean/aleefonts-ttf korean/nanumfonts korean/unfonts-core x11-fonts/anonymous-pro x11-fonts/artwiz-aleczapka x11-fonts/dejavu x11-fonts/inconsolata-ttf x11-fonts/terminus-font x11-fonts/cantarell-fonts x11-fonts/droid-fonts-ttf x11-fonts/doulos x11-fonts/ubuntu-font x11-fonts/isabella x11-fonts/junicode x11-fonts/khmeros x11-fonts/padauk x11-fonts/stix-fonts x11-fonts/charis x11-fonts/urwfonts-ttf russian/koi8r-ps x11-fonts/geminifonts x11-fonts/cyr-rfx x11-fonts/paratype x11-fonts/gentium-plus x11-fonts/nerd-fonts x11-fonts/powerline-fonts
+
+# Install Emoji fonts & tooling
+pkg install -y twemoji-color-font-ttf noto-emoji textproc/ibus-uniemoji
+
+# Install Icon & Cursor Themes
+pkg install -y x11-themes/papirus-icon-theme x11-themes/cursor-neutral-white-theme x11-themes/qogir-icon-themes x11-themes/win98se-icon-theme
+
+
+
+
+####################################################
+# Samba server (www.server-world.info)
+#
+####################################################
+
+pkg install -y samba416
+
+mkdir /home/share
+chmod 777 /home/share
+cat >>/usr/local/etc/smb4.conf <<EOF
+
+ # create new
+
+[global]
+    unix charset = UTF-8
+    workgroup = HOMELAB
+    server string = FreeBSD
+    # network range you allow to access
+    interfaces = 127.0.0.0/8 192.168.22.0/24
+    bind interfaces only = yes
+    map to guest = bad user
+
+# any Share name you like
+[Share]
+    # specify shared directory
+    path = /home/share
+    # allow writing
+    writable = yes
+    # allow guest user (nobody)
+    guest ok = yes
+    # looks all as guest user
+    guest only = yes
+    # set permission [777] when file created
+    force create mode = 777
+    # set permission [777] when folder created
+    force directory mode = 777
+
+EOF
+
+sysrc samba_server_enable="YES"
+
+service samba_server start 
+
+
+
+
+
+
+####################################################
+# install xrdp (need reboot)
+#
+####################################################
+
+pkg install -y xrdp xorgxrdp
+sysrc  xrdp_enable="YES"
+sysrc xrdp_sesman_enable="YES"
+
+
+####################################################
+# enable wdm on xrdp by vi
+# vi /usr/local/etc/xrdp/startwm.sh
+#	#enable
+#	startxfce4
+#	mate-session
+####################################################
+
+
+mv /usr/local/etc/xrdp/startwm.sh /usr/local/etc/xrdp/startwm.sh.backup
+echo 'export LANG=fr_FR.UTF-8' >> /usr/local/etc/xrdp/startwm.sh
+# echo 'exec mate-session' >> /usr/local/etc/xrdp/startwm.sh
+# echo 'exec startxfce4 --with-ck-launch' >> /usr/local/etc/xrdp/startwm.sh
+echo 'exec startplasma-x11' > /usr/local/etc/xrdp/startwm.sh
+
+
+chmod 555  /usr/local/etc/xrdp/startwm.sh
+
+####################################################
+# passage en latest
+####################################################
+
+
+sed -i '' 's/quarterly/latest/g' /etc/pkg/FreeBSD.conf
+pkg update -f
+
+pkg upgrade -y
+
+
+####################################################
+# retour en quarterly
+####################################################
+
+
+sed -i '' 's/latest/quarterly/g' /etc/pkg/FreeBSD.conf
+pkg update -f
+
+
+####################################################
+# install virtualbox 7
+# 15.3.2026 now ok, and no reboot 
+#
+####################################################
+
+pkg install -y virtualbox-ose-72
+
+kldload vboxdrv
+kldload vboxnetflt
+kldload vboxnetadp
+
+sysrc -f /boot/loader.conf vboxdrv_load="YES"
+sysrc -f /boot/loader.conf vboxnet_load="YES"
+sysrc vboxnet_enable="YES"
+
+service devfs restart 
+
+pw groupmod vboxusers -m root
+
+pw groupmod vboxusers -m administrateur
+
+chown root:vboxusers /dev/vboxnetctl
+chmod 0660 /dev/vboxnetctl
+
+echo 'own     vboxnetctl root:vboxusers' >> /etc/devfs.conf
+echo 'perm     vboxnetctl 0660' >> /etc/devfs.conf
+
+echo '[system=11]' >> /etc/devfs.rules
+echo "add path 'usb/*' mode 0660 group operator" >> /etc/devfs.rules
+echo "add path 'video*' mode 0660 group operator" >> /etc/devfs.rules
+
+
+
+
+
+
+####################################################
+# some tips to manage temp on board
+# 
+####################################################
+
+
+####################################################
+# for AMD CPU 
+sysrc -f /boot/loader.conf amdtemp_load="YES"
+pkg install -y sensors
+pkg install -y cpu-microcode
+sysrc -f /boot/loader.conf cpu_microcode_load="YES"
+sysrc -f /boot/loader.conf cpu_microcode_name="/boot/firmware/amd-ucode.bin"
+
+
+
+
+
+
+
+###################################################
+# optional NASA sddm customization, to config files
+# on /media directory
+#
+####################################################
+
+git clone https://github.com/msartor99/FreeBSD14 /tmp/fb14_assets
+
+
+cd /usr/local/share/sddm/themes
+mkdir nasa
+cp ./maldives/* ./nasa/
+cd nasa
+cp /tmp/fb14_assets/Main.qml .
+cp /tmp/fb14_assets/metadata.desktop .
+rm background.jpg
+cp /tmp/fb14_assets/nasa2560login.jpg background.jpg
+
+cat > /usr/local/etc/sddm.conf <<EOF
+[Theme]
+# Current theme name
+Current=nasa
+[General]
+background=background.png
+displayFont="Montserrat"
+EOF
+
+####################################################
+# boot menu 
+#
+####################################################
+
+
+cp -r /tmp/fb14_assets/freebsd-brand-rev.png /boot/images
+cp -r /tmp/fb14_assets/freebsd-logo-rev.png  /boot/images
+
+####################################################
+# alternate splash  thanks to NASA for images
+#
+####################################################
+
+
+cp -r /tmp/fb14_assets/nasa1920.png  /boot/images/splash.png
+sysrc -f /boot/loader.conf splash="/boot/images/splash.png"
+cd
+
+
+
+####################################################
+# install AMD Graphic driver, choice for AMD recent or Radeon RX 5500 
+#
+####################################################
+
+pkg install -y wayland xwayland
+pkg install -y drm-kmod
+sysrc kld_list+=radeonkms
+
+####################################################
+# ou
+sysrc kld_list+=amdgpu
