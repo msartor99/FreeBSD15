@@ -191,7 +191,6 @@ cat > /usr/local/etc/sddm.conf << 'EOF'
 InputMethod=""
 EOF
 
-# Déploiement du thème SDDM Windows 11
 mkdir -p /usr/local/share/sddm/themes
 if [ ! -d /usr/local/share/sddm/themes/Win11 ]; then
     cd /tmp
@@ -207,17 +206,19 @@ cat > /usr/local/etc/sddm.conf.d/theme.conf << 'EOF'
 Current=Win11
 EOF
 
-# 14. PNG SPLASH SCREEN CONVERSION (NATIVE RGBA)
+# 14. PNG SPLASH SCREEN CONVERSION (NATIVE RGBA CORRIGÉ)
 mkdir -p /boot/images
 cd /tmp
-wget -q -O v2.png https://kamila.is
-magick convert v2.png -resize 1920x1080 -strip -type TrueColorAlpha /boot/images/splash.png
+# Utilisation d'un user-agent pour forcer le téléchargement du binaire PNG propre
+wget -q -U "Mozilla/5.0" -O v2.png https://kamila.is
+
+# Syntaxe IMv7 corrigée ("magick" sans l'argument déprécié "convert")
+magick v2.png -resize 1920x1080 -strip -type TrueColorAlpha /boot/images/splash.png
 rm -f v2.png
 
 # 15. CINNAMON DESKTOP ENVIRONMENT & WINDOWS 11 (FLUENT) GRAPHICS THEME
 pkg install -y cinnamon
 
-# Déploiement système des thèmes GTK et icônes pour Cinnamon (Accessible à tous les utilisateurs)
 mkdir -p /usr/local/share/themes /usr/local/share/icons
 
 if [ ! -d /usr/local/share/themes/Win11-dark ]; then
