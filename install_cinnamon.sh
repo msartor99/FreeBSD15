@@ -1,325 +1,244 @@
 #!/bin/sh
-# ==============================================================================
-# PROJECT MODERN-BSD : FreeBSD 15 + Cinnamon + NVIDIA (Master Auto-Installer)
-# EDITION      : Ultimate (English/Universal)
-# INCLUDES     : ZFS Boot Environments, Doas, Qt/GTK Bridge, CPU Microcodes
-# ==============================================================================
+set -e
 
 if [ "$(id -u)" -ne 0 ]; then
-    echo "ERROR: This script must be run as root."
+    echo "Erreur : Ce script doit être exécuté en tant que root." >&2
     exit 1
 fi
 
-BACKTITLE="FreeBSD 15 Universal Workstation Installer"
+echo "=== Configuration Idempotente FreeBSD 15.1 + Style Windows 11 ==="
 
-# ==============================================================================
-# BLOCK 1: DISCLAIMER & INTERACTIVE MENUS
-# ==============================================================================
+# 1. BASE CONFIG & SSH
+if ! grep -q "^PermitRootLogin yes" /etc/ssh/sshd_config; then
+    echo "PermitRootLogin yes" >> /etc/ssh/sshd_config
+    service sshd restart
+fi
+freebsd-update fetch install --not-running-from-cron
 
-show_disclaimer() {
-    local msg="DISCLAIMER OF LIABILITY\n\n\
-This script deeply modifies the configuration of your FreeBSD system. \
-It is provided 'as is', without any express or implied warranty. \
-By using it, you agree that the author cannot be held responsible \
-for any data loss, system failure, or other damage.\n\n\
-Do you accept these terms to continue?"
-
-    if ! bsddialog --backtitle "$BACKTITLE" --title "Warning & Disclaimer" --yesno "$msg" 14 75; then
-        clear
-        echo "Installation cancelled by the user. No changes were made."
-        exit 1
+# 2. LOADER CONFIGURATION (SPLASH SCREEN VT PNG CORRECTION)
+touch /boot/loader.conf
+add_to_loader() {
+    if ! grep -q "^$1=" /boot/loader.conf; then
+        echo "$1=\"$2\"" >> /boot/loader.conf
+    else
+        sed -i '' "s|^$1=.*|$1=\"$2\"|" /boot/loader.conf
     fi
 }
+sed -i '' '/hw.vga.textmode/d' /boot/loader.conf
 
-# Run the disclaimer first
-show_disclaimer
+add_to_loader "kern.vty" "vt"
+add_to_loader "boot_mute" "YES"
+add_to_loader "autoboot_delay" "3"
+add_to_loader "efi_max_resolution" "1920x1080"
+add_to_loader "kern.vt.fb.default_mode" "1920x1080"
+add_to_loader "tmpfs_load" "YES"
+add_to_loader "aio_load" "YES"
+add_to_loader "coretemp_load" "YES"
+add_to_loader "cpu_microcode_name" "/boot/firmware/intel-ucode.bin"
+add_to_loader "splash" "/boot/images/splash.png"
+add_to_loader "shutdown_splash" "/boot/images/splash.png"
+add_to_loader "hw.nvidiadrm.modeset" "1"
+add_to_loader "hw.nvidia.registry.EnableGpuFirmware" "1"
+add_to_loader "nvidia-drm.modeset" "1"
 
-SYS_KBD=$(sysrc -n keymap 2>/dev/null | grep -Eo '^[a-z]{2}' || echo "us")
-DEFAULT_LANG="en_US.UTF-8"
-DEFAULT_X11_KBD="us"
+sysrc -q rc_startmsgs=NO
 
-case "$SYS_KBD" in
-    fr) DEFAULT_LANG="fr_FR.UTF-8"; DEFAULT_X11_KBD="fr" ;;
-    ch) DEFAULT_LANG="fr_CH.UTF-8"; DEFAULT_X11_KBD="ch-fr" ;;
-    de) DEFAULT_LANG="de_DE.UTF-8"; DEFAULT_X11_KBD="de" ;;
-esac
-
-USER_LOCALE=$(bsddialog --backtitle "$BACKTITLE" --title "Language & Region" --default-item "$DEFAULT_LANG" --menu "Select System Language:" 15 60 8 \
-    "en_US.UTF-8" "English (US)" \
-    "en_GB.UTF-8" "English (UK)" \
-    "fr_FR.UTF-8" "French (France)" \
-    "fr_CH.UTF-8" "French (Switzerland)" \
-    "de_DE.UTF-8" "German (Germany)" \
-    "de_CH.UTF-8" "German (Switzerland)" 3>&1 1>&2 2>&3)
-if [ $? -ne 0 ]; then clear; exit 1; fi
-
-X11_KBD=$(bsddialog --backtitle "$BACKTITLE" --title "Keyboard (X11)" --default-item "$DEFAULT_X11_KBD" --menu "Select Keyboard Layout:" 15 60 8 \
-    "us" "US English" \
-    "gb" "UK English" \
-    "fr" "French (AZERTY)" \
-    "ch-fr" "Swiss French (QWERTZ)" \
-    "ch-de" "Swiss German (QWERTZ)" \
-    "de" "German (QWERTZ)" 3>&1 1>&2 2>&3)
-if [ $? -ne 0 ]; then clear; exit 1; fi
-
-case "$X11_KBD" in
-    *-*) XKBLAYOUT="${X11_KBD%%-*}"; XKBVARIANT="${X11_KBD##*-}" ;;
-    *)   XKBLAYOUT="$X11_KBD"; XKBVARIANT="" ;;
-esac
-
-while true; do
-    TARGET_USER=$(bsddialog --backtitle "$BACKTITLE" --title "Target User" --inputbox "Enter the target username (e.g., admin):" 10 60 3>&1 1>&2 2>&3)
-    if [ $? -ne 0 ] || [ -z "$TARGET_USER" ]; then clear; exit 1; fi
-    if id "$TARGET_USER" >/dev/null 2>&1; then break; else bsddialog --title "Error" --msgbox "User '$TARGET_USER' does not exist." 8 50; fi
-done
-USER_HOME=$(eval echo "~$TARGET_USER")
-
-CPU_CHOICE=$(bsddialog --backtitle "$BACKTITLE" --title "CPU Selection" --menu "Select Processor for Microcode Updates:" 12 55 3 \
-    1 "Intel CPU" 2 "AMD CPU" 3 "Skip (Virtual Machine)" 3>&1 1>&2 2>&3)
-if [ $? -ne 0 ]; then clear; exit 1; fi
-
-GPU_CHOICE=$(bsddialog --backtitle "$BACKTITLE" --title "GPU Selection" --menu "Select Graphics Card Vendor:" 12 50 3 \
-    1 "AMD" 2 "NVIDIA" 3 "Intel" 3>&1 1>&2 2>&3)
-if [ $? -ne 0 ]; then clear; exit 1; fi
-
-if [ "$GPU_CHOICE" = "2" ]; then
-    NV_VER=$(bsddialog --backtitle "$BACKTITLE" --title "NVIDIA Version" --menu "Select NVIDIA Driver Branch:" 12 60 3 \
-        1 "Latest (595+)" 2 "Legacy 580" 3 "Legacy 470" 3>&1 1>&2 2>&3)
-    if [ $? -ne 0 ]; then clear; exit 1; fi
-fi
-
-clear
-step_start() { 
-    printf "\n\033[1;36m================================================================================\033[0m\n"
-    printf "\033[1;36m %s \033[0m\n" "$1"
-    printf "\033[1;36m================================================================================\033[0m\n"
+# 3. SYSCTL CONFIGURATION
+touch /etc/sysctl.conf
+add_to_sysctl() {
+    if ! grep -q "^$1" /etc/sysctl.conf; then echo "$1" >> /etc/sysctl.conf; fi
 }
+add_to_sysctl "kern.sched.preempt_thresh=224"
+add_to_sysctl "kern.ipc.shm_allow_removed=1"
+add_to_sysctl "net.local.stream.recvspace=65536"
+add_to_sysctl "net.local.stream.sendspace=65536"
+add_to_sysctl "vfs.usermount=1"
+add_to_sysctl "hw.snd.default_unit=1"
 
-# ==============================================================================
-# BLOCK 2: INFRASTRUCTURE & FREEBSD FIXES
-# ==============================================================================
-step_start "1/8: Core Services & FreeBSD Fixes"
+# 4. INTEL CPU & MICROCODE
+pkg install -y cpu-microcode devices-sensors 2>/dev/null || pkg install -y cpu-microcode sensors
+sysrc -q microcode_update_enable="YES"
+service microcode_update start 2>/dev/null || true
 
-sysrc dbus_enable="YES"
-sysrc sddm_enable="YES"
-sysrc cupsd_enable="YES"
-sysrc autofs_enable="YES"
+# 5. LINUX & NVIDIA GRAPHICS DRIVERS
+sysrc -q linux_enable="YES"
+sysrc -q linux_mounts_enable="YES"
+service linux start 2>/dev/null || true
 
-if ! grep -q "procfs" /etc/fstab; then echo "proc    /proc    procfs    rw    0    0" >> /etc/fstab; mount -t procfs proc /proc 2>/dev/null; fi
-if ! grep -q "fdescfs" /etc/fstab; then echo "fdesc   /dev/fd   fdescfs   rw   0   0" >> /etc/fstab; mount -t fdescfs fdesc /dev/fd 2>/dev/null; fi
-if [ ! -s /etc/machine-id ]; then dbus-uuidgen > /etc/machine-id; fi
-if ! grep -q "localhost $(hostname)" /etc/hosts; then echo "127.0.0.1 localhost $(hostname)" >> /etc/hosts; fi
+pkg install -y nvidia-driver-580 linux-nvidia-libs-580 nvidia-kmod-580 nvidia-drm-kmod-580 libc6-shim nvidia-settings nvidia-xconfig
+sysrc -q nvidia_modeset_enable="YES"
 
-env ASSUME_ALWAYS_YES=YES /usr/sbin/pkg bootstrap -f
-env ASSUME_ALWAYS_YES=YES /usr/sbin/pkg update -f
-
-# ==============================================================================
-# BLOCK 3: CPU MICROCODE & PACKAGE INSTALLATION
-# ==============================================================================
-step_start "2/8: CPU Microcode & System Packages"
-
-if [ "$CPU_CHOICE" = "1" ]; then
-    env ASSUME_ALWAYS_YES=YES /usr/sbin/pkg install -y devcpu-data-intel
-    sysrc -f /boot/loader.conf cpu_microcode_load="YES"
-    sysrc -f /boot/loader.conf cpu_microcode_name="/boot/firmware/intel-ucode.bin"
-    sysrc microcode_update_enable="YES"
-elif [ "$CPU_CHOICE" = "2" ]; then
-    env ASSUME_ALWAYS_YES=YES /usr/sbin/pkg install -y devcpu-data-amd
-    sysrc -f /boot/loader.conf cpu_microcode_load="YES"
-    sysrc -f /boot/loader.conf cpu_microcode_name="/boot/firmware/amd-ucode.bin"
-    sysrc microcode_update_enable="YES"
+if [ ! -f /etc/X11/xorg.conf ] && [ ! -f /usr/local/etc/X11/xorg.conf ]; then
+    nvidia-xconfig
 fi
 
-env ASSUME_ALWAYS_YES=YES /usr/sbin/pkg install -y \
-    xorg xprop xorg-apps sddm pulseaudio pavucontrol cups system-config-printer automount fusefs-ntfs fusefs-exfat gvfs \
-    cinnamon cinnamon-screensaver doas unzip wget alacritty flameshot htop neofetch firefox vlc \
-    gtk-arc-themes papirus-icon-theme qt5-style-plugins qt5ct qt6ct
-
-# ==============================================================================
-# BLOCK 4: GPU CONFIGURATION
-# ==============================================================================
-step_start "3/8: GPU Configuration"
-case $GPU_CHOICE in
-    2)
-        KMOD_DRIVER="nvidia-modeset"
-        case $NV_VER in 2) NV_BASE="nvidia-driver-580" ;; 3) NV_BASE="nvidia-driver-470" ;; *) NV_BASE="nvidia-driver" ;; esac
-        env ASSUME_ALWAYS_YES=YES /usr/sbin/pkg install -y "$NV_BASE" nvidia-xconfig nvidia-settings
-        if [ -f /usr/local/bin/nvidia-xconfig ]; then nvidia-xconfig; fi
-        ;;
-    3) KMOD_DRIVER="i915kms"; env ASSUME_ALWAYS_YES=YES /usr/sbin/pkg install -y drm-kmod libva-intel-driver ;;
-    *) KMOD_DRIVER="amdgpu"; env ASSUME_ALWAYS_YES=YES /usr/sbin/pkg install -y drm-kmod ;;
-esac
-
-CURRENT_KMODS=$(sysrc -n kld_list)
-case "$CURRENT_KMODS" in *"$KMOD_DRIVER"*) ;; *) sysrc kld_list+="$KMOD_DRIVER" ;; esac
-
-# ==============================================================================
-# BLOCK 5: SECURITY (DOAS), KEYBOARD & PERMISSIONS
-# ==============================================================================
-step_start "4/8: Pure Philosophy: Doas, Keyboard & Device Permissions"
-
-mkdir -p /usr/local/etc
-if ! grep -q "permit persist :wheel" /usr/local/etc/doas.conf 2>/dev/null; then
-    echo "permit persist :wheel" > /usr/local/etc/doas.conf
-    echo "permit nopass :operator cmd /sbin/shutdown" >> /usr/local/etc/doas.conf
+# 6. BASE UTILITIES & SMARTD
+pkg install -y doas unzip libzip wget git htop neofetch python3 bashtop ImageMagick7 smartmontools
+sysrc -q smartd_enable="YES"
+if [ ! -f /usr/local/etc/smartd.conf ] && [ -f /usr/local/etc/smartd.conf.sample ]; then
+    cp /usr/local/etc/smartd.conf.sample /usr/local/etc/smartd.conf
 fi
-ln -sf /usr/local/bin/doas /usr/local/bin/sudo
+service smartd start 2>/dev/null || true
 
-sysrc sddm_lang="${USER_LOCALE%%.*}"
-mkdir -p /usr/local/etc/X11/xorg.conf.d
-cat > /usr/local/etc/X11/xorg.conf.d/00-keyboard.conf << EOF
-Section "InputClass"
-        Identifier "system-keyboard"
-        MatchIsKeyboard "on"
-        Option "XkbLayout" "$XKBLAYOUT"
-        Option "XkbVariant" "$XKBVARIANT"
-EndSection
+# 7. FRENCH (SUISSE) LOCALIZATION
+if ! grep -q "^french|French Users Accounts:" /etc/login.conf; then
+    cat >> /etc/login.conf << 'EOF'
+french|French Users Accounts:\
+     :charset=UTF-8:\
+     :lang=fr_CH.UTF-8:\
+      lc_all=fr_CH.UTF-8:\
+     :tc=default:
 EOF
-
-XSETUP="/usr/local/share/sddm/scripts/Xsetup"
-if [ -f "$XSETUP" ]; then
-    sed -i '' '/setxkbmap/d' "$XSETUP" 2>/dev/null
-    echo "setxkbmap -layout $XKBLAYOUT ${XKBVARIANT:+-variant $XKBVARIANT}" >> "$XSETUP"
+    cap_mkdb /etc/login.conf
 fi
+echo 'defaultclass=french' > /etc/adduser.conf
 
-sysrc -f /etc/sysctl.conf vfs.usermount=1; sysctl vfs.usermount=1 >/dev/null
-cat > /etc/devfs.rules << 'EOF'
+if pw user show administrateur >/dev/null 2>&1; then
+    pw usermod administrateur -G wheel,operator,video -L french
+fi
+pw usermod root -L french
+
+# 8. SKEL USER PROFILE (AUTOMATIC USER SETTINGS VA-API/VDPAU FOR NVIDIA)
+inject_user_profile() {
+    touch "$1"
+    if ! grep -q "export VDPAU_DRIVER" "$1"; then
+        cat >> "$1" << 'EOF'
+# --- Accélération matérielle NVIDIA ---
+export VDPAU_DRIVER="nvidia"
+export LIBVA_DRIVER_NAME="vdpau"
+alias vlc="vlc --avcodec-hw=vdpau"
+EOF
+    fi
+}
+inject_user_profile "/usr/share/skel/dot.shrc"
+if [ -d /home/administrateur ]; then
+    inject_user_profile "/home/administrateur/.shrc"
+    chown administrateur:administrateur /home/administrateur/.shrc
+fi
+inject_user_profile "/root/.shrc"
+
+# 9. PRINTER & USB MOUNTS
+if [ ! -f /etc/devfs.rules ] || ! grep -q "\[localrules=5\]" /etc/devfs.rules; then
+    cat >> /etc/devfs.rules << 'EOF'
 [localrules=5]
 add path 'da*' mode 0660 group operator
 add path 'cd*' mode 0660 group operator
+add path 'uscanner*' mode 0660 group operator
+add path 'xpt*' mode 0660 group operator
+add path 'pass*' mode 0660 group operator
+add path 'md*' mode 0660 group operator
+add path 'msdosfs/*' mode 0660 group operator
+add path 'ext2fs/*' mode 0660 group operator
+add path 'ntfs/*' mode 0660 group operator
 add path 'usb/*' mode 0660 group operator
-add path 'lpt*' mode 0660 group cups
-add path 'ulpt*' mode 0660 group cups
 add path 'unlpt*' mode 0660 group cups
+add path 'lpt*' mode 0660 group cups
 EOF
-sysrc devfs_system_ruleset="localrules"; service devfs restart 2>/dev/null || true
+fi
 
-CLASS_NAME="custom_${USER_LOCALE%%.*}"
-sed -i '' "/^${CLASS_NAME}|/,/:tc=default:/d" /etc/login.conf 2>/dev/null
-printf "%s|Custom User Class:\n\t:charset=UTF-8:\n\t:lang=%s:\n\t:tc=default:\n" "$CLASS_NAME" "$USER_LOCALE" >> /etc/login.conf
-cap_mkdb /etc/login.conf
-pw usermod "$TARGET_USER" -G wheel,operator,video,cups -L "$CLASS_NAME" 2>/dev/null
+pkg install -y cups gutenprint cups-filters hplip system-config-printer fusefs-ntfs fusefs-ext2 fusefs-hfsfuse
+sysrc -q cupsd_enable="YES"
+sysrc -q devfs_system_ruleset="localrules"
+service devfs restart 2>/dev/null || true
+sysrc -q kld_list="fusefs ext2fs nvidia-modeset"
 
-# ==============================================================================
-# BLOCK 6: ULTIMATE WRAPPER & SDDM CONFIGURATION
-# ==============================================================================
-step_start "5/8: SDDM Configuration, Wrapper & Wallpapers"
+# 10. AUDIO, DESKTOP APPS & MULTIMEDIA
+pkg install -y pulseaudio pipewire wireplumber audio/freedesktop-sound-theme
+pkg install -y firefox vlc ffmpeg libva-vdpau-driver libva-utils libdvdread libdvdnav signal-cli xdg-user-dirs octopkg multimedia/mpv gstreamer1-plugins-all gstreamer1-libav libbluray
+
+# 11. INTERNATIONAL FONTS & THEMES
+pkg install -y cantarell-fonts droid-fonts-ttf inconsolata-ttf noto-basic noto-emoji roboto-fonts-ttf ubuntu-font webfonts terminus-font terminus-ttf
+pkg install -y chinese/arphicttf chinese/font-std hebrew/culmus hebrew/elmar-fonts japanese/font-ipa japanese/font-ipa-uigothic japanese/font-ipaex japanese/font-kochi japanese/font-migmix japanese/font-migu japanese/font-mona-ipa japanese/font-motoya-al japanese/font-mplus-ipa japanese/font-sazanami japanese/font-shinonome japanese/font-takao japanese/font-ume japanese/font-vlgothic x11-fonts/hanazono-fonts-ttf japanese/font-mikachan korean/aleefonts-ttf korean/nanumfonts korean/unfonts-core x11-fonts/anonymous-pro x11-fonts/artwiz-aleczapka x11-fonts/dejavu x11-fonts/doulos x11-fonts/isabella x11-fonts/junicode x11-fonts/khmeros x11-fonts/padauk x11-fonts/stix-fonts x11-fonts/charis x11-fonts/urwfonts-ttf russian/koi8r-ps x11-fonts/geminifonts x11-fonts/cyr-rfx x11-fonts/paratype x11-fonts/gentium-plus-compact x11-fonts/nerd-fonts
+pkg install -y twemoji-color-font-ttf textproc/ibus-uniemoji x11-themes/papirus-icon-theme x11-themes/cursor-neutral-white-theme x11-themes/qogir-icon-themes x11-themes/win98se-icon-theme
+
+# 12. X11 & KEYBOARD CONFIG
+pkg install -y xorg dbus avahi seatd
+sysrc -q dbus_enable="YES"
+sysrc -q avahi_enable="YES"
+
+add_to_fstab() {
+    if ! grep -q "$1" /etc/fstab; then echo "$2" >> /etc/fstab; fi
+}
+add_to_fstab "procfs" "proc       proc       procfs       rw       0       0"
+add_to_fstab "fdescfs" "fdesc     /dev/fd      fdescfs       rw       0       0"
+
+mkdir -p /usr/local/etc/X11/xorg.conf.d
+cat > /usr/local/etc/X11/xorg.conf.d/20-keyboards.conf << 'EOF'
+Section "ServerFlags"
+    Option "DontZap" "false"
+EndSection
+Section "InputClass"
+    Identifier "All Keyboards"
+    MatchIsKeyboard "yes"
+    Option "XkbLayout" "ch"
+    Option "XkbVariant" "fr"
+    Option "XkbOptions" "terminate:ctrl_alt_bksp" 
+EndSection
+EOF
+
+# 13. DISPLAY MANAGER (SDDM) & WINDOWS 11 LOGIN THEME
+pkg install -y sddm
+sysrc -q sddm_enable="YES"
+sysrc -q sddm_lang="fr_CH.UTF-8"
+
+touch /usr/local/share/sddm/scripts/Xsetup
+if ! grep -q "setxkbmap ch fr" /usr/local/share/sddm/scripts/Xsetup; then
+    echo "setxkbmap ch fr" >> /usr/local/share/sddm/scripts/Xsetup
+fi
+
+cat > /usr/local/etc/sddm.conf << 'EOF'
+[Autoinstall]
+InputMethod=""
+EOF
+
+# Déploiement du thème SDDM Windows 11
+mkdir -p /usr/local/share/sddm/themes
+if [ ! -d /usr/local/share/sddm/themes/Win11 ]; then
+    cd /tmp
+    wget -q https://github.com
+    unzip -q main.zip
+    cp -r Win11-SDDM-main/Win11 /usr/local/share/sddm/themes/
+    rm -rf main.zip Win11-SDDM-main
+fi
 
 mkdir -p /usr/local/etc/sddm.conf.d
-printf "[Theme]\nCurrent=maldives\n" > /usr/local/etc/sddm.conf.d/10-theme.conf
+cat > /usr/local/etc/sddm.conf.d/theme.conf << 'EOF'
+[Theme]
+Current=Win11
+EOF
 
-mkdir -p /usr/local/share/backgrounds
+# 14. PNG SPLASH SCREEN CONVERSION (NATIVE RGBA)
+mkdir -p /boot/images
+cd /tmp
+wget -q -O v2.png https://kamila.is
+magick convert v2.png -resize 1920x1080 -strip -type TrueColorAlpha /boot/images/splash.png
+rm -f v2.png
 
-# SDDM Background Setup
-if [ -f /usr/local/share/sddm/themes/maldives/background.jpg ]; then
-    cp -f /usr/local/share/sddm/themes/maldives/background.jpg /usr/local/share/backgrounds/maldives-beach.jpg
-    chmod 644 /usr/local/share/backgrounds/maldives-beach.jpg
+# 15. CINNAMON DESKTOP ENVIRONMENT & WINDOWS 11 (FLUENT) GRAPHICS THEME
+pkg install -y cinnamon
+
+# Déploiement système des thèmes GTK et icônes pour Cinnamon (Accessible à tous les utilisateurs)
+mkdir -p /usr/local/share/themes /usr/local/share/icons
+
+if [ ! -d /usr/local/share/themes/Win11-dark ]; then
+    cd /tmp
+    wget -q https://github.com
+    unzip -q master.zip
+    cp -r Win11-gtk-theme-master/release/Win11-dark /usr/local/share/themes/
+    cp -r Win11-gtk-theme-master/release/Win11-light /usr/local/share/themes/
+    rm -rf master.zip Win11-gtk-theme-master
 fi
 
-# Veligandu Island Download for Cinnamon Desktop
-fetch -o /usr/local/share/backgrounds/veligandu-island.jpg "https://raw.githubusercontent.com/msartor99/FreeBSD15/a14e0129b3fcfbe40901ce20c2ffaefe674e5201/veligandu-island.jpg"
-chmod 644 /usr/local/share/backgrounds/veligandu-island.jpg
-
-# The Master Cinnamon Launcher
-cat > /usr/local/bin/start-cinnamon << EOF
-#!/bin/sh
-export LANG="$USER_LOCALE"
-export LC_ALL="$USER_LOCALE"
-export LANGUAGE="$USER_LOCALE"
-export QT_QPA_PLATFORMTHEME="gtk3"
-
-exec dbus-launch --exit-with-session /usr/local/bin/cinnamon-session
-EOF
-chmod +x /usr/local/bin/start-cinnamon
-
-mkdir -p /usr/local/share/xsessions
-cat > /usr/local/share/xsessions/cinnamon.desktop << 'EOF'
-[Desktop Entry]
-Name=Cinnamon
-Comment=FreeBSD Custom Cinnamon Launcher
-Exec=/usr/local/bin/start-cinnamon
-TryExec=/usr/local/bin/start-cinnamon
-Icon=
-Type=Application
-EOF
-
-# ==============================================================================
-# BLOCK 7: USER PROFILE & ALACRITTY
-# ==============================================================================
-step_start "6/8: Local Profile & Terminal Configuration"
-
-mkdir -p "$USER_HOME/.config/dconf"
-mkdir -p "$USER_HOME/.config/alacritty"
-
-cat > "$USER_HOME/.config/alacritty/alacritty.toml" << 'EOF'
-[window]
-opacity = 0.85
-padding = { x = 12, y = 12 }
-dynamic_padding = true
-[font]
-size = 11.0
-[colors.primary]
-background = "#0f1c2e"
-foreground = "#d8e2eb"
-[colors.normal]
-black   = "#0f1c2e"
-red     = "#e06c75"
-green   = "#98c379"
-yellow  = "#e5c07b"
-blue    = "#61afef"
-magenta = "#c678dd"
-cyan    = "#56b6c2"
-white   = "#d8e2eb"
-EOF
-
-# ==============================================================================
-# BLOCK 8: THEMATIC AUTOSTART INJECTION
-# ==============================================================================
-step_start "7/8: Preparing Theme Injection (Autostart)"
-
-mkdir -p "$USER_HOME/.config/autostart"
-
-cat > "$USER_HOME/.config/autostart/apply-cinnamon-theme.sh" << 'EOF'
-#!/bin/sh
-sleep 3
-gsettings set org.cinnamon.desktop.background picture-uri "'file:///usr/local/share/backgrounds/veligandu-island.jpg'"
-gsettings set org.cinnamon.desktop.background picture-options "'zoom'"
-gsettings set org.cinnamon.desktop.interface gtk-theme "'Arc'"
-gsettings set org.cinnamon.desktop.wm.preferences theme "'Arc'"
-gsettings set org.cinnamon.theme name "'Arc'"
-gsettings set org.cinnamon.desktop.interface icon-theme "'Papirus'"
-gsettings set org.cinnamon.desktop.default-applications.terminal exec "'alacritty'"
-rm -f "$HOME/.config/autostart/apply-cinnamon-theme.desktop"
-rm -f "$0"
-EOF
-chmod +x "$USER_HOME/.config/autostart/apply-cinnamon-theme.sh"
-
-cat > "$USER_HOME/.config/autostart/apply-cinnamon-theme.desktop" << EOF
-[Desktop Entry]
-Type=Application
-Name=ThemeInjector
-Exec=$USER_HOME/.config/autostart/apply-cinnamon-theme.sh
-Hidden=false
-NoDisplay=false
-X-GNOME-Autostart-enabled=true
-EOF
-
-chown -R "$TARGET_USER" "$USER_HOME"
-
-# ==============================================================================
-# BLOCK 9: ZFS INDESTRUCTIBILITY
-# ==============================================================================
-step_start "8/8: ZFS Securing"
-
-if mount | grep -q 'on / (zfs,'; then
-    printf "ZFS system detected. Creating Boot Environment 'sys_cinnamon_clean'...\n"
-    bectl destroy sys_cinnamon_clean 2>/dev/null || true
-    bectl create sys_cinnamon_clean
-    printf "👉 ZFS Snapshot successfully created.\n"
-else
-    printf "System is not on ZFS. Skipping step.\n"
+if [ ! -d /usr/local/share/icons/Fluent-dark ]; then
+    cd /tmp
+    wget -q https://github.com
+    unzip -q master.zip
+    cp -r Fluent-icon-theme-master/Fluent /usr/local/share/icons/
+    cp -r Fluent-icon-theme-master/Fluent-dark /usr/local/share/icons/
+    rm -rf master.zip Fluent-icon-theme-master
 fi
 
-printf "\n\033[1;32m[ SUCCESS ] Ultimate UNIX/Cinnamon installation completed successfully.\033[0m\n"
-printf "Please reboot the machine (/sbin/shutdown -r now).\n"
-printf "On first login, let the script apply the magic of the Maldives!\n\n"
+echo "=== Configuration complete ! ==="
+pciconf -lv | grep -B4 "VGA" || true
+echo "================================"
+cd
