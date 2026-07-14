@@ -23,10 +23,11 @@ It is provided 'as is', without any express or implied warranty. \
 By using it, you agree that the author cannot be held responsible \
 for any data loss, system breakage, or other damage.\n\n\
 ACKNOWLEDGEMENTS\n\n\
-A huge thanks to Kamila (kamila.is) for the alternate splash screen.\n\n\
+A huge thanks to Kamila (kamila.is) for the alternate splash screen, \
+and to NASA for their public domain images.\n\n\
 Do you accept these conditions to continue?"
 
-    if ! bsddialog --backtitle "$BACKTITLE" --title "Warning & Credits" --yesno "$msg" 18 75; then
+    if ! bsddialog --backtitle "$BACKTITLE" --title "Warning & Credits" --yesno "$msg" 19 75; then
         clear
         echo "Installation cancelled by the user. No changes have been made."
         exit 1
@@ -155,6 +156,11 @@ Section "InputClass"
     Option "XkbOptions" "terminate:ctrl_alt_bksp"
 EndSection
 EOF
+
+    # Fix clavier Suisse Romand pour SDDM de façon idempotente
+    if [ -f /usr/local/share/sddm/scripts/Xsetup ]; then
+        add_line_if_missing "setxkbmap ch fr" /usr/local/share/sddm/scripts/Xsetup
+    fi
 }
 
 nvidia_config() {
@@ -327,10 +333,68 @@ kamila_splash() {
     # Redimensionnement 1920x1080 (convient pour la majorité des affichages)
     magick convert v2.png -resize 1920x1080 v2hd.png
     
-    sysrc -f /boot/loader.conf splash="/boot/images/splash.png"
+    # Définition pour le splash de démarrage ET le splash d'extinction
+    sysrc -f /boot/loader.conf splash="/boot/images/splash.png" shutdown_splash="/boot/images/splash.png"
     cp -f /tmp/v2hd.png /boot/images/splash.png
     
     bsddialog --msgbox "Kamila Splash Screen configuré avec succès !" 6 60
+}
+
+nasa_theme() {
+    # --- 1. Login Screen (SDDM) & Boot Splash ---
+    [ -d /tmp/fb14_assets ] && rm -rf /tmp/fb14_assets
+    git clone https://github.com/msartor99/FreeBSD14 /tmp/fb14_assets
+    mkdir -p /usr/local/share/sddm/themes/nasa
+    cp -r /usr/local/share/sddm/themes/maldives/* /usr/local/share/sddm/themes/nasa/
+    cp -f /tmp/fb14_assets/Main.qml /usr/local/share/sddm/themes/nasa/
+    cp -f /tmp/fb14_assets/metadata.desktop /usr/local/share/sddm/themes/nasa/
+    cp -f /tmp/fb14_assets/nasa2560login.jpg /usr/local/share/sddm/themes/nasa/background.jpg
+    
+    cat > /usr/local/etc/sddm.conf <<EOF
+[Theme]
+Current=nasa
+EOF
+    
+    mkdir -p /boot/images
+    cp -f /tmp/fb14_assets/freebsd-brand-rev.png /boot/images/freebsd-brand-rev.png
+    cp -f /tmp/fb14_assets/freebsd-logo-rev.png /boot/images/freebsd-logo-rev.png
+    
+    # Petit logo pour le démarrage
+    cp -f /tmp/fb14_assets/nasa1920.png /boot/images/splash.png
+    
+    # Création de la grande image pour le splash d'arrêt
+    bsddialog --infobox "Génération de la grande image NASA pour l'arrêt..." 5 70
+    pkg install -y ImageMagick7
+    magick convert /tmp/fb14_assets/nasa2560login.jpg -resize 1920x1080 /boot/images/shutdown_splash.png
+    
+    # Application au chargeur de démarrage
+    sysrc -f /boot/loader.conf splash="/boot/images/splash.png" shutdown_splash="/boot/images/shutdown_splash.png"
+
+    # --- 2. Plasma 6 Wallpaper ---
+    bsddialog --infobox "Téléchargement et configuration du fond d'écran NASA pour Plasma..." 5 70
+    mkdir -p /usr/local/share/wallpapers
+    
+    fetch -o /usr/local/share/wallpapers/nasa-4k-wallpaper.jpg "https://raw.githubusercontent.com/msartor99/FreeBSD14/ffdccbb160df14397836ce9b3b361c9ab87f97a9/wp8860763-nasa-4k-wallpapers.jpg"
+    chmod 644 /usr/local/share/wallpapers/nasa-4k-wallpaper.jpg
+
+    mkdir -p /usr/local/etc/xdg/autostart
+    cat > /usr/local/bin/apply-nasa-wallpaper.sh <<'EOF'
+#!/bin/sh
+if [ ! -f "$HOME/.nasa_wallpaper_applied" ]; then
+    sleep 4
+    plasma-apply-wallpaperimage /usr/local/share/wallpapers/nasa-4k-wallpaper.jpg
+    touch "$HOME/.nasa_wallpaper_applied"
+fi
+EOF
+    chmod +x /usr/local/bin/apply-nasa-wallpaper.sh
+
+    cat > /usr/local/etc/xdg/autostart/nasa-wallpaper.desktop <<EOF
+[Desktop Entry]
+Exec=/usr/local/bin/apply-nasa-wallpaper.sh
+Name=Apply NASA Wallpaper
+Type=Application
+OnlyShowIn=KDE;
+EOF
 }
 
 apps_config() {
@@ -351,7 +415,7 @@ show_disclaimer
 # --- MAIN MENU ---
 while true; do
     MAIN_CHOICE=$(bsddialog --backtitle "$BACKTITLE" --title "$TITLE" \
-        --menu "Post-Installation Menu:" 23 85 14 \
+        --menu "Post-Installation Menu:" 24 85 15 \
         "1" "Base Config & Locales (SSH, Boot, Linux, User)" \
         "2" "CPU Management (Intel/AMD)" \
         "3" "Hardware Base (Audio, Xorg, CUPS)" \
@@ -364,8 +428,9 @@ while true; do
         "10" "XRDP Remote Desktop" \
         "11" "VirtualBox 7.2" \
         "12" "Kamila Splash Screen" \
-        "13" "Applications & Fonts" \
-        "14" "Upgrade to LATEST Branch" \
+        "13" "NASA Theme" \
+        "14" "Applications & Fonts" \
+        "15" "Upgrade to LATEST Branch" \
         "Q" "Quit" 3>&1 1>&2 2>&3)
 
     case $MAIN_CHOICE in
@@ -381,8 +446,9 @@ while true; do
         10) xrdp_config ;;
         11) vbox_config ;;
         12) kamila_splash ;;
-        13) apps_config ;;
-        14) switch_latest ;;
+        13) nasa_theme ;;
+        14) apps_config ;;
+        15) switch_latest ;;
         Q|q|*) break ;;
     esac
 done
