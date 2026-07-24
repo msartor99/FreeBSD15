@@ -19,6 +19,11 @@ sh install_universal.sh
 
 Enjoy!
 
+# 24 july 2026
+
+new script for integration of laptop dependency
+
+fetch https://raw.githubusercontent.com/msartor99/FreeBSD15/refs/heads/main/post-install-1.2.sh
 
 # 8 july 2026, simple MATE desktop post installation
 
