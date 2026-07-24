@@ -2,7 +2,7 @@
 # ==============================================================================
 # IDEMPOTENT INSTALLATION AND CONFIGURATION SCRIPT FOR FREEBSD
 # Target: Universal Desktop Deployment (Workstations & Laptops)
-# Version: 6.1 (Merged with Laptop optimizations, Dynamic User, NASA Theme & NVIDIA Sub-menu)
+# Version: 6.4 (Fixed sysrc syntax, NVIDIA Sub-menu, Wayland exclusion & Menu order)
 # ==============================================================================
 
 # Check for root privileges
@@ -39,11 +39,6 @@ add_line_if_missing() {
     grep -qF -- "$LINE" "$FILE" || echo "$LINE" >> "$FILE"
 }
 
-# Helper function for sysrc
-set_sysrc() {
-    sysrc -v "$1=$2" >/dev/null
-}
-
 MAJOR_VERSION=$(uname -K | cut -c 1-2)
 
 # ==============================================================================
@@ -59,8 +54,8 @@ MAIN_USER=$(cat "$MENU_OUT")
 # FreeBSD Version Selection Menu
 bsddialog --title "FreeBSD Target Version" \
           --menu "Select your installed FreeBSD version branch:" 15 70 2 \
-          "1" "FreeBSD 14.x-RELEASE" \
-          "2" "FreeBSD 15.x-RELEASE (or higher)" 2> "$MENU_OUT"
+          "1" "FreeBSD 15.x-RELEASE (or higher)" \
+          "2" "FreeBSD 14.x-RELEASE" 2> "$MENU_OUT"
 OS_CHOICE=$(cat "$MENU_OUT")
 
 # Machine Type (Desktop vs Laptop)
@@ -151,7 +146,7 @@ bsddialog --title "Software Selection" \
 APP_CHOICES=$(cat "$MENU_OUT")
 
 # Assign variables based on choices
-[ "$OS_CHOICE" -eq 2 ] && SAMBA_PKG="samba419" VBOX_PKG="virtualbox-ose" || SAMBA_PKG="samba416" VBOX_PKG="virtualbox-ose-72"
+[ "$OS_CHOICE" -eq 1 ] && SAMBA_PKG="samba419" VBOX_PKG="virtualbox-ose" || SAMBA_PKG="samba416" VBOX_PKG="virtualbox-ose-72"
 
 case "$LANG_CHOICE" in
     1) SYS_LANG="fr_CH.UTF-8"; SYS_LC="fr_CH"; CLASS_NAME="swissfrench" ;;
@@ -201,18 +196,18 @@ pw usermod "$MAIN_USER" -L ${CLASS_NAME}
 # ==============================================================================
 echo "⚙️  Optimizing boot loader and kernel parameters..."
 
-set_sysrc -f /boot/loader.conf boot_mute YES
-set_sysrc splash_changer_enable YES
-set_sysrc rc_startmsgs NO
-set_sysrc -f /boot/loader.conf autoboot_delay 3
-set_sysrc -f /boot/loader.conf tmpfs_load YES
-set_sysrc -f /boot/loader.conf aio_load YES
+sysrc -f /boot/loader.conf boot_mute="YES"
+sysrc splash_changer_enable="YES"
+sysrc rc_startmsgs="NO"
+sysrc -f /boot/loader.conf autoboot_delay="3"
+sysrc -f /boot/loader.conf tmpfs_load="YES"
+sysrc -f /boot/loader.conf aio_load="YES"
 
 # Universal Network/TCP optimizations
 add_line_if_missing 'net.inet.tcp.soreceive_stream="1"' /boot/loader.conf
 add_line_if_missing 'net.isr.defaultqlimit="2048"' /boot/loader.conf
 add_line_if_missing 'net.link.ifqmaxlen="2048"' /boot/loader.conf
-set_sysrc kld_list+="cc_htcp"
+sysrc kld_list+="cc_htcp"
 
 # Sysctl Tweaks
 add_line_if_missing "kern.sched.preempt_thresh=224" /etc/sysctl.conf
@@ -240,9 +235,9 @@ if [ "$MACHINE_TYPE" -eq 2 ]; then
     add_line_if_missing 'vfs.zfs.txg.timeout="10"' /boot/loader.conf
     add_line_if_missing 'hw.snd.latency="7"' /etc/sysctl.conf
     
-    set_sysrc performance_cx_lowest Cmax
-    set_sysrc economy_cx_lowest Cmax
-    set_sysrc kld_list+="acpi_ibm"
+    sysrc performance_cx_lowest="Cmax"
+    sysrc economy_cx_lowest="Cmax"
+    sysrc kld_list+="acpi_ibm"
     
     # Configure sudoers for networkmgr
     mkdir -p /usr/local/etc/sudoers.d
@@ -257,16 +252,16 @@ fi
 # ==============================================================================
 case "$CPU_CHOICE" in
     1)
-        set_sysrc -f /boot/loader.conf amdtemp_load="YES"
+        sysrc -f /boot/loader.conf amdtemp_load="YES"
         pkg install -y cpu-microcode
-        set_sysrc -f /boot/loader.conf cpu_microcode_load="YES"
-        set_sysrc -f /boot/loader.conf cpu_microcode_name="/boot/firmware/amd-ucode.bin"
+        sysrc -f /boot/loader.conf cpu_microcode_load="YES"
+        sysrc -f /boot/loader.conf cpu_microcode_name="/boot/firmware/amd-ucode.bin"
         ;;
     2)
-        set_sysrc -f /boot/loader.conf coretemp_load="YES"
+        sysrc -f /boot/loader.conf coretemp_load="YES"
         pkg install -y cpu-microcode
-        set_sysrc -f /boot/loader.conf cpu_microcode_load="YES"
-        set_sysrc -f /boot/loader.conf cpu_microcode_name="/boot/firmware/intel-ucode.bin"
+        sysrc -f /boot/loader.conf cpu_microcode_load="YES"
+        sysrc -f /boot/loader.conf cpu_microcode_name="/boot/firmware/intel-ucode.bin"
         ;;
 esac
 
@@ -274,16 +269,16 @@ esac
 # 6. LINUX COMPAT & CORE UTILITIES
 # ==============================================================================
 echo "🐧 Configuring base components and Linux compatibility..."
-set_sysrc linux_enable YES
-set_sysrc linux64_enable YES
+sysrc linux_enable="YES"
+sysrc linux64_enable="YES"
 
 pkg install -y doas unzip wget git htop neofetch python3 bashtop ImageMagick7 smartmontools dbus avahi seatd fusefs-ntfs fusefs-ext2
 
-set_sysrc smartd_enable YES
+sysrc smartd_enable="YES"
 [ ! -f /usr/local/etc/smartd.conf ] && cp /usr/local/etc/smartd.conf.sample /usr/local/etc/smartd.conf
-set_sysrc dbus_enable YES
-set_sysrc avahi_enable YES
-set_sysrc seatd_enable YES
+sysrc dbus_enable="YES"
+sysrc avahi_enable="YES"
+sysrc seatd_enable="YES"
 
 add_line_if_missing "proc /proc procfs rw 0 0" /etc/fstab
 add_line_if_missing "fdesc /dev/fd fdescfs rw 0 0" /etc/fstab
@@ -325,8 +320,8 @@ add path 'drm/*' mode 0660 group video
 add path 'video*' mode 0660 group video
 add path 'backlight/*' mode 0660 group operator
 EOF
-set_sysrc devfs_system_ruleset localrules
-set_sysrc kld_list+="fusefs ext2fs"
+sysrc devfs_system_ruleset="localrules"
+sysrc kld_list+="fusefs ext2fs"
 
 # ==============================================================================
 # 8. GRAPHICS & X11
@@ -338,20 +333,21 @@ case "$GPU_CHOICE" in
         NV_LINUX_PKG="linux-nvidia-libs-${NVIDIA_VERSION}"
         
         echo "🟢 Installing NVIDIA proprietary driver (Version ${NVIDIA_VERSION})..."
-        pkg install -y "$NV_PKG" "$NV_LINUX_PKG" libc6-shim nvidia-settings nvidia-xconfig wayland xwayland
+        # REMOVED wayland and xwayland from here to avoid conflicts with NVIDIA X11 sessions
+        pkg install -y "$NV_PKG" "$NV_LINUX_PKG" libc6-shim nvidia-settings nvidia-xconfig
         
-        set_sysrc kld_list+="nvidia-modeset"
+        sysrc kld_list+="nvidia-modeset"
         add_line_if_missing 'hw.nvidiadrm.modeset="1"' /boot/loader.conf
         add_line_if_missing 'hw.nvidia.registry.EnableGpuFirmware="1"' /boot/loader.conf
         [ ! -f /etc/X11/xorg.conf ] && [ ! -f /usr/local/etc/X11/xorg.conf ] && nvidia-xconfig --silent
         ;;
     2)
         pkg install -y drm-kmod wayland xwayland
-        set_sysrc kld_list+="amdgpu"
+        sysrc kld_list+="amdgpu"
         ;;
     3)
         pkg install -y drm-kmod wayland xwayland
-        set_sysrc kld_list+="i915kms"
+        sysrc kld_list+="i915kms"
         ;;
     4)
         pkg install -y xf86-video-scfb xf86-video-vmware xf86-video-vesa wayland xwayland
@@ -379,17 +375,17 @@ STARTWM_EXEC=""
 case "$DE_CHOICE" in
     1)
         pkg install -y sddm pavucontrol kate konsole ark dolphin Kvantum plasma6-plasma kf6-frameworks
-        set_sysrc sddm_enable "YES"
+        sysrc sddm_enable="YES"
         STARTWM_EXEC="exec startplasma-x11"
         ;;
     2)
         pkg install -y xfce sddm pavucontrol
-        set_sysrc sddm_enable "YES"
+        sysrc sddm_enable="YES"
         STARTWM_EXEC="exec startxfce4"
         ;;
     3)
         pkg install -y mate sddm pavucontrol
-        set_sysrc sddm_enable "YES"
+        sysrc sddm_enable="YES"
         STARTWM_EXEC="exec mate-session"
         ;;
 esac
@@ -432,7 +428,7 @@ EOF
     cp -r /tmp/fb14_assets/freebsd-brand-rev.png /boot/images
     cp -r /tmp/fb14_assets/freebsd-logo-rev.png  /boot/images
     cp -r /tmp/fb14_assets/nasa1920.png /boot/images/splash.png 2>/dev/null
-    set_sysrc -f /boot/loader.conf splash "/boot/images/splash.png"
+    sysrc -f /boot/loader.conf splash="/boot/images/splash.png"
     
     fetch -o /tmp/fb14_assets/nasa_4k_wallpaper.jpg https://raw.githubusercontent.com/msartor99/FreeBSD14/ffdccbb160df14397836ce9b3b361c9ab87f97a9/wp8860763-nasa-4k-wallpapers.jpg
     
@@ -465,14 +461,14 @@ fi
 
 if echo "$APP_CHOICES" | grep -q "MEDIA"; then
     pkg install -y pulseaudio pipewire wireplumber vlc ffmpeg multimedia/mpv kdenlive webcamd v4l-utils
-    set_sysrc webcamd_enable YES
+    sysrc webcamd_enable="YES"
     [ "$GPU_CHOICE" -eq 1 ] && add_line_if_missing "hw.snd.default_unit=1" /etc/sysctl.conf
 fi
 
 if echo "$APP_CHOICES" | grep -q "VBOX"; then
     pkg install -y ${VBOX_PKG}
-    set_sysrc -f /boot/loader.conf vboxdrv_load "YES"
-    set_sysrc vboxnet_enable "YES"
+    sysrc -f /boot/loader.conf vboxdrv_load="YES"
+    sysrc vboxnet_enable="YES"
     pw groupmod vboxusers -m root 2>/dev/null
     pw groupmod vboxusers -m "$MAIN_USER" 2>/dev/null
     add_line_if_missing "own vboxnetctl root:vboxusers" /etc/devfs.conf
@@ -481,8 +477,8 @@ fi
 
 if echo "$APP_CHOICES" | grep -q "XRDP"; then
     pkg install -y xrdp xorgxrdp
-    set_sysrc xrdp_enable "YES"
-    set_sysrc xrdp_sesman_enable "YES"
+    sysrc xrdp_enable="YES"
+    sysrc xrdp_sesman_enable="YES"
     mkdir -p /usr/local/etc/xrdp
     cat > /usr/local/etc/xrdp/startwm.sh << EOF
 #!/bin/sh
@@ -511,7 +507,7 @@ if echo "$APP_CHOICES" | grep -q "SAMBA"; then
     guest ok = no
     force create mode = 0775
 EOF
-    set_sysrc samba_server_enable "YES"
+    sysrc samba_server_enable="YES"
 fi
 
 # ==============================================================================
