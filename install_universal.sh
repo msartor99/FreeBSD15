@@ -2,7 +2,7 @@
 # ==============================================================================
 # IDEMPOTENT INSTALLATION AND CONFIGURATION SCRIPT FOR FREEBSD
 # Target: Universal Desktop Deployment (Workstations & Laptops)
-# Version: 6.10 (English localization, SDDM xauth fix, NASA KCM Preview Fix)
+# Version: 6.11 (English localization, SDDM xauth fix, NASA Preview Fix, TWM removed)
 # ==============================================================================
 
 # Check for root privileges
@@ -333,8 +333,8 @@ sysrc kld_list+="fusefs ext2fs"
 # ==============================================================================
 # 8. GRAPHICS & X11
 # ==============================================================================
-echo "🖥️  Installing X.org base, TWM, and session utilities..."
-pkg install -y xorg xauth xinit xterm twm
+echo "🖥️  Installing X.org base and session utilities..."
+pkg install -y xorg xauth xinit xterm
 
 case "$GPU_CHOICE" in
     1)
@@ -397,21 +397,6 @@ case "$DE_CHOICE" in
         STARTWM_EXEC="exec mate-session"
         ;;
 esac
-
-# Create TWM session file for SDDM
-if [ "$DE_CHOICE" -ne 4 ]; then
-    echo "⌨️  Adding TWM to SDDM sessions..."
-    mkdir -p /usr/local/share/xsessions
-    cat > /usr/local/share/xsessions/twm.desktop << EOF
-[Desktop Entry]
-Name=TWM
-Comment=Tab Window Manager
-Exec=twm
-TryExec=twm
-Icon=
-Type=Application
-EOF
-fi
 
 # SDDM Keyboard Fix & UI Flag Sync
 if [ "$DE_CHOICE" -ne 4 ]; then
