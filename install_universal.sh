@@ -2,7 +2,7 @@
 # ==============================================================================
 # IDEMPOTENT INSTALLATION AND CONFIGURATION SCRIPT FOR FREEBSD
 # Target: Universal Desktop Deployment (Workstations & Laptops)
-# Version: 6.5 (English localization, Fixed sysrc syntax, NVIDIA Sub-menu)
+# Version: 6.6 (English localization, SDDM Flag Sync, NASA Theme Preview Fix)
 # ==============================================================================
 
 # Check for root privileges
@@ -328,12 +328,10 @@ sysrc kld_list+="fusefs ext2fs"
 # ==============================================================================
 case "$GPU_CHOICE" in
     1)
-        # Dynamically build the package names based on user selection
         NV_PKG="nvidia-driver-${NVIDIA_VERSION}"
         NV_LINUX_PKG="linux-nvidia-libs-${NVIDIA_VERSION}"
         
         echo "🟢 Installing NVIDIA proprietary driver (Version ${NVIDIA_VERSION})..."
-        # REMOVED wayland and xwayland from here to avoid conflicts with NVIDIA X11 sessions
         pkg install -y "$NV_PKG" "$NV_LINUX_PKG" libc6-shim nvidia-settings nvidia-xconfig
         
         sysrc kld_list+="nvidia-modeset"
@@ -390,8 +388,10 @@ case "$DE_CHOICE" in
         ;;
 esac
 
-# SDDM Keyboard Fix
+# SDDM Keyboard Fix & UI Flag Sync
 if [ "$DE_CHOICE" -ne 4 ]; then
+    echo "⌨️  Configuring SDDM keyboard layout and UI flag..."
+    
     mkdir -p /usr/local/share/sddm/scripts
     cat > /usr/local/share/sddm/scripts/Xsetup << EOF
 #!/bin/sh
@@ -404,6 +404,17 @@ if [ -x /usr/local/bin/setxkbmap ]; then
 fi
 EOF
     chmod 555 /usr/local/share/sddm/scripts/Xsetup
+
+    # Plasma/SDDM kxkbrc config to fix the UI flag
+    mkdir -p /var/db/sddm/.config
+    cat > /var/db/sddm/.config/kxkbrc << EOF
+[Layout]
+DisplayNames=
+LayoutList=${KBD_LAYOUT}
+Use=true
+VariantList=${KBD_VARIANT}
+EOF
+    chown -R sddm:sddm /var/db/sddm/.config 2>/dev/null || true
 fi
 
 # NASA Theme
@@ -414,8 +425,13 @@ if [ "$DE_CHOICE" -ne 4 ] && [ "$THEME_NASA" -eq 0 ]; then
     cp /usr/local/share/sddm/themes/maldives/* /usr/local/share/sddm/themes/nasa/ 2>/dev/null
     cp /tmp/fb14_assets/Main.qml /usr/local/share/sddm/themes/nasa/
     cp /tmp/fb14_assets/metadata.desktop /usr/local/share/sddm/themes/nasa/
-    rm -f /usr/local/share/sddm/themes/nasa/background.jpg
+    
+    # Fix Background and Preview image for Plasma Settings
+    rm -f /usr/local/share/sddm/themes/nasa/background.*
+    rm -f /usr/local/share/sddm/themes/nasa/preview.*
     cp /tmp/fb14_assets/nasa2560login.jpg /usr/local/share/sddm/themes/nasa/background.jpg
+    cp /tmp/fb14_assets/nasa2560login.jpg /usr/local/share/sddm/themes/nasa/preview.jpg
+    sed -i '' 's/^Preview=.*/Preview=preview.jpg/' /usr/local/share/sddm/themes/nasa/metadata.desktop
 
     cat > /usr/local/etc/sddm.conf << EOF
 [Theme]
