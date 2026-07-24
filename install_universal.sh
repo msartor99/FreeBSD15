@@ -2,7 +2,7 @@
 # ==============================================================================
 # IDEMPOTENT INSTALLATION AND CONFIGURATION SCRIPT FOR FREEBSD
 # Target: Universal Desktop Deployment (Workstations & Laptops)
-# Version: 6.6 (English localization, SDDM Flag Sync, NASA Theme Preview Fix)
+# Version: 6.8 (Fixed Linux Compatibility load order for NVIDIA drivers)
 # ==============================================================================
 
 # Check for root privileges
@@ -38,8 +38,6 @@ add_line_if_missing() {
     [ ! -f "$FILE" ] && touch "$FILE"
     grep -qF -- "$LINE" "$FILE" || echo "$LINE" >> "$FILE"
 }
-
-MAJOR_VERSION=$(uname -K | cut -c 1-2)
 
 # ==============================================================================
 # 1. INTERACTIVE SELECTION MENUS (bsddialog)
@@ -272,7 +270,16 @@ echo "🐧 Configuring base components and Linux compatibility..."
 sysrc linux_enable="YES"
 sysrc linux64_enable="YES"
 
-pkg install -y doas unzip wget git htop neofetch python3 bashtop ImageMagick7 smartmontools dbus avahi seatd fusefs-ntfs fusefs-ext2
+# CRITICAL FIX: Ensure Linux modules are actively loaded in memory BEFORE
+# attempting to install linux userland or linux-nvidia-libs
+kldload -n linux 2>/dev/null || true
+kldload -n linux64 2>/dev/null || true
+
+# Explicitly install the Linux base environment first
+pkg install -y linux-rl9 doas unzip wget git htop neofetch python3 bashtop ImageMagick7 smartmontools dbus avahi seatd fusefs-ntfs fusefs-ext2
+
+# Start the linux service immediately so virtual filesystems (/compat/linux/proc) are mounted
+service linux start 2>/dev/null || true
 
 sysrc smartd_enable="YES"
 [ ! -f /usr/local/etc/smartd.conf ] && cp /usr/local/etc/smartd.conf.sample /usr/local/etc/smartd.conf
@@ -527,21 +534,8 @@ EOF
 fi
 
 # ==============================================================================
-# 11. AQUANTIA WORKAROUND & BRANCH SWITCH
+# 11. SYSTEM UPDATE (BRANCH SWITCH)
 # ==============================================================================
-if pciconf -lv | grep -iqE "Aquantia|vendor=0x1d6a|device=0xd107|device=0x07b1"; then
-    bsddialog --title "Aquantia Detected" --yesno "Inject FAST Aquantia binary?" 10 70
-    if [ $? -eq 0 ]; then
-        URL="https://raw.githubusercontent.com/msartor99/FreeBSD15-aquantia-P620/cac5ac6ac55c4c08dce89b8a59a6204267c7d5f9/FB${MAJOR_VERSION}_if_atlantic.ko"
-        fetch -o "/tmp/if_atlantic.ko" "$URL"
-        if [ -f "/tmp/if_atlantic.ko" ]; then
-            mv "/tmp/if_atlantic.ko" "/boot/modules/if_atlantic.ko"
-            chmod 555 "/boot/modules/if_atlantic.ko"
-            add_line_if_missing 'if_atlantic_load="YES"' /boot/loader.conf
-        fi
-    fi
-fi
-
 bsddialog --title "System Update" --yesno "Switch to 'latest' branch for updates?" 10 70
 if [ $? -eq 0 ]; then
     sed -i '' 's/quarterly/latest/g' /etc/pkg/FreeBSD.conf
