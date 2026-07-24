@@ -2,7 +2,7 @@
 # ==============================================================================
 # IDEMPOTENT INSTALLATION AND CONFIGURATION SCRIPT FOR FREEBSD
 # Target: Universal Desktop Deployment (Workstations & Laptops)
-# Version: 6.9 (English localization, SDDM xauth crash fix, added TWM session)
+# Version: 6.10 (English localization, SDDM xauth fix, NASA KCM Preview Fix)
 # ==============================================================================
 
 # Check for root privileges
@@ -451,19 +451,34 @@ if [ "$DE_CHOICE" -ne 4 ] && [ "$THEME_NASA" -eq 0 ]; then
     cp /tmp/fb14_assets/Main.qml /usr/local/share/sddm/themes/nasa/
     cp /tmp/fb14_assets/metadata.desktop /usr/local/share/sddm/themes/nasa/
     
-    # Fix Background and Preview image for Plasma Settings
+    # ------------------------------------------------------------------
+    # FULL Fix for Background and Preview image (Plasma Settings)
+    # ------------------------------------------------------------------
+    # Remove all default preview and background images inherited from Maldives
     rm -f /usr/local/share/sddm/themes/nasa/background.*
     rm -f /usr/local/share/sddm/themes/nasa/preview.*
+    
+    # Copy NASA image as both jpg and png to trick KDE's hardcoded caching
     cp /tmp/fb14_assets/nasa2560login.jpg /usr/local/share/sddm/themes/nasa/background.jpg
+    cp /tmp/fb14_assets/nasa2560login.jpg /usr/local/share/sddm/themes/nasa/preview.png
     cp /tmp/fb14_assets/nasa2560login.jpg /usr/local/share/sddm/themes/nasa/preview.jpg
-    sed -i '' 's/^Preview=.*/Preview=preview.jpg/' /usr/local/share/sddm/themes/nasa/metadata.desktop
+    
+    # Update or add 'Preview=' key in metadata.desktop
+    if grep -q "^Preview=" /usr/local/share/sddm/themes/nasa/metadata.desktop; then
+        sed -i '' 's/^Preview=.*/Preview=preview.png/' /usr/local/share/sddm/themes/nasa/metadata.desktop
+    else
+        echo "Preview=preview.png" >> /usr/local/share/sddm/themes/nasa/metadata.desktop
+    fi
+
+    # Ensure theme.conf specifically points to our background.jpg
+    if [ -f /usr/local/share/sddm/themes/nasa/theme.conf ]; then
+        sed -i '' 's/^background=.*/background=background.jpg/' /usr/local/share/sddm/themes/nasa/theme.conf
+    fi
+    # ------------------------------------------------------------------
 
     cat > /usr/local/etc/sddm.conf << EOF
 [Theme]
 Current=nasa
-[General]
-background=background.png
-displayFont="Montserrat"
 EOF
     mkdir -p /boot/images
     cp -r /tmp/fb14_assets/freebsd-brand-rev.png /boot/images
