@@ -25,11 +25,11 @@ chmod +x install-workstation_v1.28.sh
 
 New version of the script that compiles the NVIDIA driver and dependencies, along with Wayland, to switch to the Wayland display server.
 
-fetch https://raw.githubusercontent.com/msartor99/FreeBSD15/refs/heads/main/enable-nvidia-wayland-v1.7.sh
+fetch https://raw.githubusercontent.com/msartor99/FreeBSD15/refs/heads/main/enable-nvidia-wayland-v2.1.sh
 
-chmod +x enable-nvidia-wayland-v1.7.sh
+chmod +x enable-nvidia-wayland-v2.1.sh
 
-./enable-nvidia-wayland-v1.7.sh
+./enable-nvidia-wayland-v2.1.sh
 
 
 
