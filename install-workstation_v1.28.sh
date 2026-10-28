@@ -30,9 +30,9 @@ install_available_pkgs() {
     MISSING_PKGS=""
     for pkg in "$@"; do
         if pkg rquery "%n" "$pkg" >/dev/null 2>&1 || pkg info -e "$pkg" >/dev/null 2>&1; then
-            VALID_PKGS="$VALID_PKGS$pkg"
+            VALID_PKGS="$VALID_PKGS $pkg"
         else
-            MISSING_PKGS="$MISSING_PKGS$pkg"
+            MISSING_PKGS="$MISSING_PKGS $pkg"
         fi
     done
 
@@ -146,7 +146,7 @@ interactive_config() {
     GPU_PKGS=""
     HYBRID_INTEL=0
     
-    if [ "$GPU_CHOICE" = "intel" ] \vert{}\vert{} [ "$GPU_CHOICE" = "amd" ]; then
+    if [ "$GPU_CHOICE" = "intel" ] || [ "$GPU_CHOICE" = "amd" ]; then
         if bsddialog --title "Wayland Support" \
             --yesno "Do you want to install and enable Wayland components for your $GPU_CHOICE GPU?\n\n(Recommended for Plasma 6 and GNOME)" 10 65; then
             GPU_PKGS="drm-kmod wayland wayland-protocols xwayland"
@@ -194,17 +194,17 @@ configure_tuning() {
     sysrc rc_startmsgs="NO"
     
     if ! grep -q "> /dev/null" /etc/rc; then
-        sed -i '' 's/run_rc_script ${_rc_elem}${_boot}/run_rc_script ${_rc_elem}${_boot} > \/dev\/null/g' /etc/rc
+        sed -i '' 's/run_rc_script ${_rc_elem} ${_boot}/run_rc_script ${_rc_elem} ${_boot} > \/dev\/null/g' /etc/rc
     fi
 
     sysrc -f /boot/loader.conf tmpfs_load="YES"
     sysrc -f /boot/loader.conf aio_load="YES"
     
     SYSCTL_CONF="/etc/sysctl.conf"
-    grep -q "kern.sched.preempt_thresh" "$SYSCTL_CONF" \vert{}\vert{} echo "kern.sched.preempt_thresh=224" >> "$SYSCTL_CONF"
-    grep -q "kern.ipc.shm_allow_removed" "$SYSCTL_CONF" \vert{}\vert{} echo "kern.ipc.shm_allow_removed=1" >> "$SYSCTL_CONF"
-    grep -q "net.local.stream.recvspace" "$SYSCTL_CONF" \vert{}\vert{} echo "net.local.stream.recvspace=65536" >> "$SYSCTL_CONF"
-    grep -q "net.local.stream.sendspace" "$SYSCTL_CONF" \vert{}\vert{} echo "net.local.stream.sendspace=65536" >> "$SYSCTL_CONF"
+    grep -q "kern.sched.preempt_thresh" "$SYSCTL_CONF" || echo "kern.sched.preempt_thresh=224" >> "$SYSCTL_CONF"
+    grep -q "kern.ipc.shm_allow_removed" "$SYSCTL_CONF" || echo "kern.ipc.shm_allow_removed=1" >> "$SYSCTL_CONF"
+    grep -q "net.local.stream.recvspace" "$SYSCTL_CONF" || echo "net.local.stream.recvspace=65536" >> "$SYSCTL_CONF"
+    grep -q "net.local.stream.sendspace" "$SYSCTL_CONF" || echo "net.local.stream.sendspace=65536" >> "$SYSCTL_CONF"
 }
 
 configure_cpu_microcode() {
@@ -245,7 +245,7 @@ install_packages() {
         seatd dbus avahi signal-cli \
         xorg sddm \
         pulseaudio pipewire wireplumber freedesktop-sound-theme \
-        $DE_PKGS $GPU_PKGS$APP_PKGS \
+        $DE_PKGS $GPU_PKGS $APP_PKGS \
         ffmpeg libva-vdpau-driver libva-utils libdvdread libdvdnav \
         eom remmina xdg-user-dirs octopkg mpv \
         gstreamer1-plugins-all gstreamer1-libav libbluray \
@@ -362,7 +362,7 @@ configure_desktop_env() {
 download_nasa_wallpaper() {
     if [ ! -f "$NASA_WALLPAPER" ]; then
         echo ">>> Downloading NASA wallpaper from GitHub (msartor99)..."
-        wget -qO "$NASA_WALLPAPER" "$NASA_URL" \vert{}\vert{} rm -f "$NASA_WALLPAPER"
+        wget -qO "$NASA_WALLPAPER" "$NASA_URL" || rm -f "$NASA_WALLPAPER"
     fi
 }
 
@@ -413,7 +413,7 @@ EOF
     fi
     
     if [ -n "$TARGET_THEME" ]; then
-        if ! grep -q "^[Theme]" "$SDDM_CONF" 2>/dev/null; then
+        if ! grep -q "^\[Theme\]" "$SDDM_CONF" 2>/dev/null; then
             printf "\n[Theme]\nCurrent=%s\n" "$TARGET_THEME" >> "$SDDM_CONF"
         else
             sed -i '' "s/^Current=.*/Current=${TARGET_THEME}/" "$SDDM_CONF"
@@ -423,7 +423,7 @@ EOF
     XSETUP="/usr/local/share/sddm/scripts/Xsetup"
     mkdir -p /usr/local/share/sddm/scripts
     if [ -n "$KBD_VARIANT" ]; then
-        KBD_CMD="setxkbmap $X_LAYOUT$KBD_VARIANT"
+        KBD_CMD="setxkbmap $X_LAYOUT $KBD_VARIANT"
     else
         KBD_CMD="setxkbmap $X_LAYOUT"
     fi
@@ -539,7 +539,7 @@ configure_doas_and_groups() {
 
     for group in wheel operator video seatd cups; do
         if pw groupshow "$group" >/dev/null 2>&1; then
-            if ! pw groupshow "$group" \vert{} grep -qiw "$TARGET_USER"; then
+            if ! pw groupshow "$group" | grep -qiw "$TARGET_USER"; then
                 pw groupmod "$group" -m "$TARGET_USER"
             fi
         fi
@@ -548,4 +548,57 @@ configure_doas_and_groups() {
 
 configure_splash() {
     if [ "$INSTALL_NASA" -eq 1 ]; then
-        echo ">>> Configuring NASA Boot Splash
+        echo ">>> Configuring NASA Boot Splash Screen..."
+        download_nasa_wallpaper
+        mkdir -p /boot/images
+
+        if [ -f "$NASA_WALLPAPER" ]; then
+            magick "$NASA_WALLPAPER" -resize 1920x1080 /boot/images/splash.png
+            sysrc -f /boot/loader.conf splash="/boot/images/splash.png"
+            sysrc -f /boot/loader.conf shutdown_splash="/boot/images/splash.png"
+            sysrc splash_changer_enable="YES"
+        fi
+    elif [ "$INSTALL_KAMILA" -eq 1 ]; then
+        echo ">>> Downloading and configuring Kamila.is Boot Splash Screen..."
+        mkdir -p /boot/images
+        
+        cd /tmp
+        wget -qO v2.png https://kamila.is/media/v2.png || true
+        if [ -f v2.png ]; then
+            magick v2.png -resize 1920x1080 /boot/images/splash.png
+            sysrc -f /boot/loader.conf splash="/boot/images/splash.png"
+            sysrc -f /boot/loader.conf shutdown_splash="/boot/images/splash.png"
+            sysrc splash_changer_enable="YES"
+        fi
+        cd - >/dev/null
+    else
+        echo ">>> Preserving original FreeBSD boot splash configuration..."
+    fi
+}
+
+main() {
+    check_root
+    interactive_config
+    
+    echo "=== Starting FreeBSD Installation (v1.28) ==="
+    configure_tuning
+    enable_linux_compat
+    init_pkg
+    configure_cpu_microcode
+    install_packages
+    configure_peripherals
+    configure_desktop_env
+    configure_locale
+    configure_sddm
+    configure_gpu
+    configure_samba
+    configure_virtualbox
+    configure_splash
+    configure_services
+    configure_doas_and_groups
+    
+    echo "=== Installation successfully completed ==="
+    echo "Please reboot the system to apply kernel changes."
+}
+
+main "$@"
