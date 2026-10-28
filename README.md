@@ -11,13 +11,7 @@ Here is the latest version of the installation script.
 
 Launch PuTTY to connect to an SSH session over the network as root or your user and type su - to connect root.
 
-type:
 
-fetch https://raw.githubusercontent.com/msartor99/FreeBSD15/refs/heads/main/install_workstation_v1.14.sh
-
-sh install_universal.sh
-
-Enjoy!
 
 # 28 october 2026
 
