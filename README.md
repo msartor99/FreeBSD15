@@ -13,11 +13,24 @@ Launch PuTTY to connect to an SSH session over the network as root or your user 
 
 type:
 
-fetch https://raw.githubusercontent.com/msartor99/FreeBSD15/refs/heads/main/install_universal.sh
+fetch https://raw.githubusercontent.com/msartor99/FreeBSD15/refs/heads/main/install_workstation_v1.14.sh
 
 sh install_universal.sh
 
 Enjoy!
+
+# 28 october 2026
+
+New version of the post-installation script for FreeBSD 15.1; a complete overhaul featuring menus based on bsddialog.
+
+fetch https://raw.githubusercontent.com/msartor99/FreeBSD15/refs/heads/main/install-workstation_v1.15.sh
+
+chmod +x install-workstation_v1.15.sh
+
+./install-workstation_v1.15.sh
+
+
+
 
 # 24 july 2026
 
