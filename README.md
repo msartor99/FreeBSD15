@@ -17,11 +17,11 @@ Launch PuTTY to connect to an SSH session over the network as root or your user 
 
 New version of the post-installation script for FreeBSD 15.1; a complete overhaul featuring menus based on bsddialog.
 
-fetch https://raw.githubusercontent.com/msartor99/FreeBSD15/refs/heads/main/install-workstation_v1.26.sh
+fetch https://raw.githubusercontent.com/msartor99/FreeBSD15/refs/heads/main/install-workstation_v1.28.sh
 
-chmod +x install-workstation_v1.26.sh
+chmod +x install-workstation_v1.28.sh
 
-./install-workstation_v1.26.sh
+./install-workstation_v1.28.sh
 
 
 
