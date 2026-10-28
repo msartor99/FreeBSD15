@@ -23,11 +23,11 @@ Enjoy!
 
 New version of the post-installation script for FreeBSD 15.1; a complete overhaul featuring menus based on bsddialog.
 
-fetch https://raw.githubusercontent.com/msartor99/FreeBSD15/refs/heads/main/install-workstation_v1.15.sh
+fetch https://raw.githubusercontent.com/msartor99/FreeBSD15/refs/heads/main/install-workstation_v1.25.sh
 
-chmod +x install-workstation_v1.15.sh
+chmod +x install-workstation_v1.25.sh
 
-./install-workstation_v1.15.sh
+./install-workstation_v1.25.sh
 
 
 
