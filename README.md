@@ -13,11 +13,11 @@ Launch PuTTY to connect to an SSH session over the network as root or your user 
 
 # 03 november 2026
 
-new script install-freebsd-workstation.sh
+new script install_freebsd_workstation.sh
 
-Complete overhaul of the install-freebsd-workstation.sh script for optimization and to use XLibre instead of X.org.
+Complete overhaul of the install_freebsd_workstation.sh script for optimization and to use XLibre instead of X.org.
 
-fetch https://raw.githubusercontent.com/msartor99/FreeBSD15/refs/heads/main/install-freebsd-workstation.sh
+fetch https://raw.githubusercontent.com/msartor99/FreeBSD15/refs/heads/main/install_freebsd_workstation.sh
 
 
 
