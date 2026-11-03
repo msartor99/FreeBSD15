@@ -11,14 +11,6 @@ Here is the latest version of the installation script.
 
 Launch PuTTY to connect to an SSH session over the network as root or your user and type su - to connect root.
 
-# 03 november 2026
-
-new script install_freebsd_workstation.sh
-
-Complete overhaul of the install_freebsd_workstation.sh script for optimization and to use XLibre instead of X.org.
-
-fetch https://raw.githubusercontent.com/msartor99/FreeBSD15/refs/heads/main/install_freebsd_workstation.sh
-
 
 
 # 28 october 2026
